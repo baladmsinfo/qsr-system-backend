@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>
+    <%= title %>
+  </title>
+
+  <script type="text/javascript" src="http://localhost:8080/public/makepayment.js"></script>
+
+  <!-- Tailwind CSS -->
+  <script src="/public/output.css"></script>
+  <!-- Vue 3 -->
+  <script src="/public/assets/js/vue.global.js"></script>
+
+  <style>
+    /* Glass effect */
+    .glass {
+      backdrop-filter: blur(18px);
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    /* Fade animation */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fadeInUp {
+      animation: fadeInUp 0.5s ease-out forwards;
+    }
+
+    /* Pay button hover effect */
+    .pay-button {
+      transition: all 0.3s ease;
+    }
+
+    .pay-button:hover {
+      transform: scale(1.03);
+      box-shadow: 0 10px 25px rgba(34, 197, 94, 0.6);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex justify-center items-start py-6 px-3 bg-gray-50">
+  <div id="app" class="w-full max-w-md flex flex-col space-y-5">
+    <!-- company Card -->
+    <div class="glass p-5 rounded-2xl shadow-xl border border-white/30 flex gap-4 items-center animate-fadeInUp">
+      <div
+        class="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold">
+        {{ instituteInitials }}
+      </div>
+      <div class="flex-1 min-w-0">
+        <h2 class="text-lg font-semibold text-gray-800 truncate">
+          {{ company.name }}
+        </h2>
+        <p class="text-sm text-gray-600 truncate">
+          {{ company.address }}
+        </p>
+      </div>
+    </div>
+
+    <!-- customer Card -->
+    <div class="glass p-5 rounded-2xl shadow-xl border border-white/30 animate-fadeInUp" style="animation-delay: 0.1s">
+      <h3 class="text-lg font-semibold text-gray-900 mb-3">
+        customer Details
+      </h3>
+      <div class="space-y-1 text-gray-700 text-sm">
+        <p><strong>Name:</strong> {{ customer.name }}</p>
+        <p><strong>Class:</strong> {{ customer.class }}</p>
+        <p><strong>Roll No:</strong> {{ customer.roll }}</p>
+      </div>
+    </div>
+
+    <!-- Fee Card -->
+    <div class="glass p-5 rounded-2xl shadow-2xl border border-white/30 animate-fadeInUp" style="animation-delay: 0.2s">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Fee Breakdown</h3>
+
+      <div class="space-y-3 text-gray-800 text-sm">
+        <div v-for="(item, index) in invoiceItems" :key="index"
+          class="flex justify-between items-center bg-white/60 py-3 px-4 rounded-xl border border-white/40 shadow-sm">
+          <label class="flex items-center gap-2 w-full cursor-pointer">
+            <input type="checkbox" v-model="item.selected" :disabled="item.disabled" class="hidden" />
+            <span class="flex-1">{{ item.title }}</span>
+            <span v-if="item.price <= 0" class="font-semibold text-green-600">
+              Paid
+            </span>
+            <span v-else class="font-semibold">
+              ₹ {{ item.price }}
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Total -->
+      <div class="flex justify-between mt-5 pt-4 border-t border-gray-300 text-2xl font-bold text-gray-900">
+        <span>Total</span>
+        <span>₹ {{ totalAmount }}</span>
+      </div>
+
+      <!-- Pay Button -->
+      <button @click="handlePay()" :disabled="totalAmount === 0"
+        class="pay-button w-full mt-6 bg-gradient-to-r from-green-400 to-green-600 text-white font-semibold py-4 text-xl rounded-2xl shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+        Pay ₹ {{ totalAmount }}
+      </button>
+
+      <p class="text-center text-xs mt-2 opacity-90 tracking-wide">
+        Powered by <strong>Bucksbox</strong>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const feeData = <%- JSON.stringify(data) %>;
+
+    Vue.createApp({
+      data() {
+        return {
+          token: feeData.token,
+          invoiceId: feeData.invoiceId,
+          company: feeData.company,
+          customer: feeData.customer,
+          invoiceItems: feeData.invoiceItems.map(f => ({ ...f, selected: f.selected ?? true }))
+        }
+      },
+      computed: {
+        totalAmount() {
+          return this.invoiceItems.filter(f => f.selected).reduce((sum, f) => sum + f.price, 0);
+        },
+        instituteInitials() {
+          if (!this.company || !this.company.name) return 'I';
+          const words = this.company.name.trim().split(' ');
+          if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+          return (words[0][0] + words[1][0]).toUpperCase();
+        }
+      },
+      methods: {
+        openBucksBox(jwtToken, totalAmount, feerecordsIdStr) {
+          if (typeof bucksbox !== "undefined") {
+            const options = { token: jwtToken, amount: totalAmount,  };
+            const buckspay = new bucksbox(options);
+            buckspay.open();
+
+            window.addEventListener("message", (e) => {
+              if (e.data?.status === "success") {
+                console.log("✅ Payment success:", e.data);
+                buckspay.close();
+              } else if (e.data?.status === "failure") {
+                console.error("❌ Payment failed:", e.data);
+                buckspay.close();
+              } else if (e.data?.status === "closed") {
+                console.log("ℹ️ Payment popup closed manually");
+              }
+            });
+          } else {
+            console.error("bucksbox script not loaded yet.");
+          }
+        },
+
+        handlePay() {
+          try {
+            const feerecordsId = this.invoiceItems.map(r => r.id ?? r);
+            const feerecordsIdStr = JSON.stringify(feerecordsId);
+            console.log("feerecordsId", feerecordsId);
+
+            if (this.token && this.totalAmount > 0) {
+              this.openBucksBox(this.token, this.totalAmount, feerecordsIdStr);
+            } else {
+              console.error("Payment initiation failed:");
+            }
+          } catch (err) {
+            console.error("Payment error:", err);
+          } finally {
+            console.log("Payment completed");
+          }
+        },
+
+        payNow() {
+          if (this.totalAmount != 0) {
+            var options = {
+              token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpbnZvaWNlSWQiOjEsInN0dWRlbnRJZCI6MSwiaW5zdGl0dXRpb25JZCI6MSwiYW1vdW50IjozMDAwMCwiaWF0IjoxNzYyMjcwNjg2fQ.Gaw-Omap_mXsUf6h2YV0tEQOdyMiePtSV2rD9l_fom8"
+            };
+            var buckspay = new bucksbox(options);
+            buckspay.open();
+            bucksboxHandler(response, function (e) {
+              if (e.data.status == "success") {
+                buckspay.close();
+                console.log(e.data);
+              }
+              if (e.data.status == "failure") {
+                buckspay.close();
+                console.log(e.data);
+              }
+            });
+            // integrate your payment gateway here
+          }
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+
+</html>

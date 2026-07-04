@@ -1,0 +1,648 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  BRANCHADMIN
+  KITCHEN
+  CASHIER
+  WAITER
+  ACCOUNTANT
+  CUSTOMER
+}
+
+enum LicenseStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  SUSPENDED
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+enum TaxType {
+  GST
+  IGST
+  SGST
+  CGST
+  VAT
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CHEQUE
+  CARD
+  OTHER
+}
+
+enum MenuAvailability {
+  AVAILABLE
+  OUT_OF_STOCK
+  HIDDEN
+}
+
+enum KitchenStation {
+  MAIN
+  GRILL
+  BEVERAGE
+  DESSERT
+  TANDOOR
+  BAKERY
+}
+
+enum OrderSource {
+  QR
+  WAITER
+  POS
+}
+
+enum OrderStatus {
+  PLACED
+  ACCEPTED
+  PREPARING
+  READY
+  SERVED
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  PENDING
+  PREPARING
+  READY
+  SERVED
+  CANCELLED
+}
+
+enum KitchenTicketStatus {
+  PENDING
+  PREPARING
+  READY
+  COMPLETED
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String
+  apikey            String?   @unique
+  name              String
+  role              Role
+  status            Boolean   @default(false)
+  mobile_verifited  Boolean   @default(false)
+  email_verifited   Boolean   @default(false)
+  invited           Boolean   @default(false)
+  inviteToken       String?
+  inviteTokenExpiry DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  waiterOrders   Order[]         @relation("OrderWaiter")
+  cashierOrders  Order[]         @relation("OrderCashier")
+  orderAuditLogs OrderAuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Currency {
+  id            String  @id @default(uuid())
+  code          String  @unique
+  name          String
+  symbol        String
+  country       String
+  decimalDigits Int?
+  rounding      Int?
+  isDefault     Boolean @default(true)
+
+  companies Company[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Company {
+  id            String  @id @default(uuid())
+  name          String
+  tenant        String? @unique
+  shortname     String?
+  gstNumber     String?
+  privateapiKey String? @unique
+  publicapiKey  String? @unique
+  /// Free-form restaurant business type: Restaurant, Cafe, Hotel, Food Court, Cloud Kitchen, Takeaway, Franchise, etc.
+  companyType   String
+
+  users          User[]
+  branches       Branch[]
+  accounts       Account[]
+  journals       JournalEntry[]
+  taxRates       TaxRate[]
+  payments       Payment[]
+  vendors        Vendor[]
+  customers      Customer[]
+  banners        Banner[]
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  orders         Order[]
+  expenses       Expense[]
+  purchases      Purchase[]
+
+  trial            Boolean @default(true)
+  primaryEmail     String
+  secondaryEmail   String?
+  primaryPhoneNo   String
+  secondaryPhoneNo String?
+
+  logoUrlShort String?
+  logoUrlLong  String?
+
+  addressLine1 String
+  addressLine2 String?
+  addressLine3 String?
+  city         String
+  state        String
+  pincode      Int
+  license      License?
+
+  currencyId String
+  currency   Currency @relation(fields: [currencyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Plan {
+  id        String    @id @default(uuid())
+  name      String
+  code      String    @unique
+  branch    Int?      @default(1)
+  licenses  License[]
+  createdAt DateTime  @default(now())
+}
+
+model License {
+  id          String        @id @default(uuid())
+  licenseKey  String        @unique
+  planId      String
+  companyId   String?       @unique
+  company     Company?      @relation(fields: [companyId], references: [id])
+  deviceId    String?
+  expiresAt   DateTime?
+  status      LicenseStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  activatedAt DateTime?
+  plan        Plan          @relation(fields: [planId], references: [id])
+}
+
+model Banner {
+  id          String  @id @default(uuid())
+  title       String?
+  description String?
+  imageUrl    String
+  manage      Boolean @default(true)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  imageId String
+  image   Images @relation(fields: [imageId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Branch {
+  id           String  @id @default(uuid())
+  name         String
+  addressLine1 String
+  addressLine2 String?
+  addressLine3 String?
+  city         String?
+  state        String?
+  pincode      Int?
+
+  gstNumber        String?
+  phone            String?
+  latitude         Float?
+  longitude        Float?
+  openingTime      String? // e.g. "07:00"
+  closingTime      String? // e.g. "22:00"
+  deliveryRadiusKm Float?
+  isOnline         Boolean @default(true)
+  acceptOrders     Boolean @default(true)
+  kitchenEnabled   Boolean @default(true)
+  posEnabled       Boolean @default(true)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  users        User[]
+  diningTables DiningTable[]
+  menuItems    MenuItem[]
+  orders       Order[]
+  expenses     Expense[]
+  purchases    Purchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, companyId])
+}
+
+model Account {
+  id        String         @id @default(uuid())
+  name      String
+  code      String
+  type      AccountType
+  companyId String
+  company   Company        @relation(fields: [companyId], references: [id])
+  parentId  String?
+  parent    Account?       @relation("AccountParent", fields: [parentId], references: [id])
+  children  Account[]      @relation("AccountParent")
+  journals  JournalEntry[]
+  expenses  Expense[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model JournalEntry {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  date        DateTime
+  description String
+  debit       Float
+  credit      Float
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model MenuCategory {
+  id           String  @id @default(uuid())
+  name         String
+  description  String?
+  displayOrder Int     @default(0)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  imageID String? @unique @map("image_id")
+  image   Images? @relation(fields: [imageID], references: [id])
+
+  subCategories MenuSubCategory[]
+  menuItems     MenuItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("menu_categories")
+}
+
+model MenuSubCategory {
+  id           String @id @default(uuid())
+  name         String
+  displayOrder Int    @default(0)
+
+  categoryId String
+  category   MenuCategory @relation(fields: [categoryId], references: [id])
+
+  menuItems MenuItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("menu_sub_categories")
+}
+
+model MenuItem {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  imageUrl    String?
+  isVeg       Boolean @default(true)
+
+  availability    MenuAvailability @default(AVAILABLE)
+  price           Float
+  prepTimeMinutes Int?
+  kitchenStation  KitchenStation   @default(MAIN)
+  displayOrder    Int              @default(0)
+  isRecommended   Boolean          @default(false)
+  isPopular       Boolean          @default(false)
+  spicyLevel      Int              @default(0)
+  tags            String[]         @default([])
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  categoryId String
+  category   MenuCategory @relation(fields: [categoryId], references: [id])
+
+  subCategoryId String?
+  subCategory   MenuSubCategory? @relation(fields: [subCategoryId], references: [id])
+
+  taxRateId String?
+  taxRate   TaxRate? @relation(fields: [taxRateId], references: [id])
+
+  orderItems OrderItem[]
+  images     Images[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DiningTable {
+  id       String  @id @default(uuid())
+  branchId String
+  branch   Branch  @relation(fields: [branchId], references: [id])
+  tableNo  String
+  qrCode   String  @unique
+  capacity Int?
+  active   Boolean @default(true)
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, tableNo])
+}
+
+model Customer {
+  id          String  @id @default(uuid())
+  name        String
+  email       String?
+  phone       String?
+  otpVerified Boolean @default(false)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vendor {
+  id        String     @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  gstin     String     @unique
+  companyId String
+  company   Company    @relation(fields: [companyId], references: [id])
+  purchases Purchase[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Order {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  tableId String?
+  table   DiningTable? @relation(fields: [tableId], references: [id])
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  waiterId String?
+  waiter   User?   @relation("OrderWaiter", fields: [waiterId], references: [id])
+
+  cashierId String?
+  cashier   User?   @relation("OrderCashier", fields: [cashierId], references: [id])
+
+  status OrderStatus @default(PLACED)
+  source OrderSource @default(QR)
+  notes  String?
+
+  kotNumber String?
+
+  subtotal    Float
+  taxAmount   Float @default(0)
+  discount    Float @default(0)
+  totalAmount Float
+
+  orderItems     OrderItem[]
+  payments       Payment[]
+  kitchenTickets KitchenTicket[]
+  auditLogs      OrderAuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderAuditLog {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  /// "ORDER" for Order.status changes, "KITCHEN_TICKET" for KitchenTicket.status changes
+  entityType String
+  ticketId   String?
+
+  fromStatus String?
+  toStatus   String
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+  role   String?
+  note   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+
+  price    Float
+  quantity Int
+  remarks  String?
+  status   OrderItemStatus @default(PENDING)
+  total    Float
+
+  taxRateId String?
+  taxRate   TaxRate? @relation(fields: [taxRateId], references: [id])
+
+  kitchenTicketId String?
+  kitchenTicket   KitchenTicket? @relation(fields: [kitchenTicketId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KitchenTicket {
+  id      String              @id @default(uuid())
+  orderId String
+  order   Order               @relation(fields: [orderId], references: [id])
+  token   String
+  station KitchenStation
+  status  KitchenTicketStatus @default(PENDING)
+
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  amount           Float
+  method           PaymentMethod
+  gatewayPaymentId String?       @unique
+  rawResponse      String?
+  referenceNo      String?
+  date             DateTime      @default(now())
+  note             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TaxRate {
+  id        String  @id @default(uuid())
+  name      String
+  rate      Float
+  type      TaxType
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  menuItems  MenuItem[]
+  orderItems OrderItem[]
+  expenses   Expense[]
+  purchases  Purchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Expense {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  date   DateTime
+  amount Float
+
+  taxRateId   String?
+  taxRate     TaxRate? @relation(fields: [taxRateId], references: [id])
+  taxAmount   Float    @default(0)
+  totalAmount Float
+
+  note String?
+
+  expenseImages ExpenseImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Purchase {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  date   DateTime
+  amount Float
+
+  taxRateId   String?
+  taxRate     TaxRate? @relation(fields: [taxRateId], references: [id])
+  taxAmount   Float    @default(0)
+  totalAmount Float
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExpenseImage {
+  id String @id @default(uuid())
+
+  expenseId String
+  expense   Expense @relation(fields: [expenseId], references: [id])
+
+  imageId String
+  image   Images @relation(fields: [imageId], references: [id])
+
+  imageUrl String
+
+  createdAt DateTime @default(now())
+}
+
+model Images {
+  id       String  @id @default(uuid())
+  url      String
+  key      String?
+  docid    Int?
+  filename String?
+  mimetype String?
+  size     Int?
+
+  expenseImages ExpenseImage[]
+
+  /// Image may belong to ONE menu category
+  category MenuCategory?
+
+  banners Banner[]
+
+  /// Still supports menu item gallery images (optional)
+  menuItemId String?
+  menuItem   MenuItem? @relation(fields: [menuItemId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("images")
+}

@@ -1,0 +1,114 @@
+{
+  "info": {
+    "name": "Wallet API Collection",
+    "_postman_id": "b1f8f6de-1234-4567-890a-abcdef123456",
+    "description": "Postman collection for Wallet Service APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Wallet",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/wallet/:walletId",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["wallet", ":walletId"]
+        }
+      }
+    },
+    {
+      "name": "Add Money",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"walletId\": \"wallet-uuid-1\",\n  \"amount\": 1000,\n  \"description\": \"Top-up\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/wallet/addMoney",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["wallet", "addMoney"]
+        }
+      }
+    },
+    {
+      "name": "Debit Wallet",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"walletId\": \"wallet-uuid-1\",\n  \"amount\": 500,\n  \"description\": \"Payment for order\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/wallet/debitWallet",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["wallet", "debitWallet"]
+        }
+      }
+    },
+    {
+      "name": "Transfer Money",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fromWalletId\": \"wallet-uuid-1\",\n  \"toWalletId\": \"wallet-uuid-2\",\n  \"amount\": 200,\n  \"description\": \"Send to friend\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/wallet/transfer",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["wallet", "transfer"]
+        }
+      }
+    },
+    {
+      "name": "Refund Transaction",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"originalTxnId\": \"txn-uuid-1\",\n  \"amount\": 100,\n  \"description\": \"Partial refund\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/wallet/refund",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["wallet", "refund"]
+        }
+      }
+    },
+    {
+      "name": "Reverse Transaction",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"txnId\": \"txn-uuid-1\",\n  \"description\": \"Undo duplicate transaction\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/wallet/reverse",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["wallet", "reverse"]
+        }
+      }
+    }
+  ]
+}

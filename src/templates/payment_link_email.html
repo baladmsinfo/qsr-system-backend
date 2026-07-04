@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" style="margin:0;padding:0;">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment Link</title>
+
+    <style>
+        body {
+            background: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 25px auto;
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        h2 {
+            margin: 0 0 10px;
+            color: #333;
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        p {
+            margin: 8px 0;
+            font-size: 15px;
+            color: #444;
+            line-height: 1.5;
+        }
+
+        .items-box {
+            margin-top: 15px;
+            background: #fafafa;
+            border: 1px solid #ececec;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .item-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e3e3e3;
+            font-size: 14px;
+        }
+
+        .item-row:last-child {
+            border-bottom: none;
+        }
+
+        .total-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: #eef3ff;
+            border-left: 5px solid #2c6bff;
+            border-radius: 6px;
+            font-size: 18px;
+        }
+
+        .btn {
+            display: block;
+            width: fit-content;
+            margin: 25px auto 10px;
+            padding: 14px 24px;
+            background: #2c6bff;
+            color: #fff !important;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: #164ccd;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 25px;
+            font-size: 12px;
+            color: #777;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="email-container">
+
+        <h2>Your Payment Link is Ready</h2>
+
+        <p>Hello {{to}},</p>
+
+        <p>
+            A payment request has been generated for your invoice.
+            Please review the details below and click the button to complete the payment.
+        </p>
+
+        <!-- ITEMS -->
+        <div class="items-box">
+            <strong style="font-size:15px;">Payment Breakdown</strong>
+
+            {{itemsHtml}}
+        </div>
+
+        <!-- TOTAL -->
+        <div class="total-box">
+            <strong>Total Due: ₹{{amount}}</strong>
+        </div>
+
+        <!-- PAY NOW BUTTON -->
+        <a href="{{paymentLink}}" class="btn">Pay Now</a>
+
+        <p style="text-align:center; font-size:13px; margin-top:10px;">
+            If you are unable to click the button, use this link:<br />
+            <a href="{{paymentLink}}" style="color:#2c6bff; font-size:13px;">{{paymentLink}}</a>
+        </p>
+
+        <div class="footer">
+            This email was automatically generated. Do not reply.
+        </div>
+
+    </div>
+</body>
+
+</html>

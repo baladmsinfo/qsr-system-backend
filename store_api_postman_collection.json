@@ -1,0 +1,123 @@
+{
+  "info": {
+    "name": "Store API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Store \u2192 Product List",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/store/products",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "store",
+            "products"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Store \u2192 Product Details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/store/products/:id",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "store",
+            "products",
+            ":id"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Store \u2192 Add to Cart",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": \"123\",\n  \"qty\": 2\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/store/cart/add",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "store",
+            "cart",
+            "add"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Store \u2192 Checkout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cartId\": \"CART001\",\n  \"paymentMethod\": \"CARD\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/store/checkout",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "store",
+            "checkout"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Store \u2192 Payment Callback",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transactionId\": \"TXN001\",\n  \"status\": \"SUCCESS\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/store/payment/callback",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "store",
+            "payment",
+            "callback"
+          ]
+        }
+      }
+    }
+  ]
+}
