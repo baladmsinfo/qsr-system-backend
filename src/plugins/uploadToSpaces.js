@@ -1,6 +1,6 @@
 // plugins/uploadToSpaces.js
 const fp = require('fastify-plugin')
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3')
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3')
 const crypto = require('crypto')
 const path = require('path')
 
@@ -86,6 +86,21 @@ async function uploadToSpacesPlugin(fastify, opts) {
       }
 
       return uploaded
+    }
+  )
+
+  // Best-effort delete of a previously-uploaded object. Storage cleanup is
+  // treated as non-critical: a failure here is logged but never allowed to
+  // block the primary DB operation (replacing/removing the image record).
+  fastify.decorate(
+    'deleteFromSpaces',
+    async (key) => {
+      if (!key) return
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: process.env.DO_SPACE_BUCKET, Key: key }))
+      } catch (err) {
+        fastify.log.error({ err, key }, 'Failed to delete object from Spaces')
+      }
     }
   )
 }

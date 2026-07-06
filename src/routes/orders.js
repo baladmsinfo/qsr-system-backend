@@ -11,18 +11,25 @@ module.exports = async function (fastify, opts) {
     try {
       const companyId = request.user.companyId
       const branchId = resolveBranchId(request)
-      const { status, tableId, page = 1, take = 50 } = request.query
+      const { status, tableId, fromDate, toDate, page = 1, take = 50 } = request.query
 
-      const { orders, total } = await svc.listOrders(fastify.prisma, {
+      const { orders, total, totalAmount } = await svc.listOrders(fastify.prisma, {
         companyId,
         branchId,
         status,
         tableId,
+        fromDate,
+        toDate,
         take: Number(take),
         skip: (Number(page) - 1) * Number(take),
       })
 
-      return reply.send({ statusCode: '00', message: 'Orders fetched successfully', data: orders, meta: { total, page: Number(page), take: Number(take) } })
+      return reply.send({
+        statusCode: '00',
+        message: 'Orders fetched successfully',
+        data: orders,
+        meta: { total, page: Number(page), take: Number(take), totalAmount },
+      })
     } catch (err) {
       request.log.error(err)
       return reply.code(500).send({ statusCode: '99', message: 'Failed to fetch orders', error: err.message })

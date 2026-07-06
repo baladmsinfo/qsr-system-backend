@@ -128,7 +128,7 @@ async function priceLines(prisma, companyId, branchId, items) {
  * only receives the order once front-of-house explicitly accepts it
  * (see updateOrderStatus -> ACCEPTED).
  */
-async function createOrder(fastify, { companyId, branchId, tableId, customerId, waiterId, source, notes, items }) {
+async function createOrder(fastify, { companyId, branchId, tableId, customerId, waiterId, source, orderType, notes, items }) {
   const prisma = fastify.prisma
   if (!branchId) throw httpError('branchId is required', 400)
 
@@ -143,6 +143,7 @@ async function createOrder(fastify, { companyId, branchId, tableId, customerId, 
         customerId: customerId || null,
         waiterId: waiterId || null,
         source: source || 'QR',
+        orderType: orderType || 'DINE_IN',
         notes: notes || null,
         subtotal,
         taxAmount,
@@ -177,20 +178,37 @@ async function createOrder(fastify, { companyId, branchId, tableId, customerId, 
   return order
 }
 
-async function listOrders(prisma, { companyId, branchId, status, tableId, take = 50, skip = 0 }) {
+// "toDate" is a calendar day (e.g. from a <input type="date">) - treat it as
+// inclusive of the whole day rather than midnight-exclusive.
+function endOfDay(dateStr) {
+  const d = new Date(dateStr)
+  d.setHours(23, 59, 59, 999)
+  return d
+}
+
+async function listOrders(prisma, { companyId, branchId, status, tableId, fromDate, toDate, take = 50, skip = 0 }) {
   const where = {
     companyId,
     ...(branchId ? { branchId } : {}),
     ...(status ? { status } : {}),
     ...(tableId ? { tableId } : {}),
+    ...(fromDate || toDate
+      ? {
+          createdAt: {
+            ...(fromDate ? { gte: new Date(fromDate) } : {}),
+            ...(toDate ? { lte: endOfDay(toDate) } : {}),
+          },
+        }
+      : {}),
   }
 
-  const [orders, total] = await Promise.all([
+  const [orders, total, revenue] = await Promise.all([
     prisma.order.findMany({ where, include: ORDER_INCLUDE, orderBy: { createdAt: 'desc' }, take, skip }),
     prisma.order.count({ where }),
+    prisma.order.aggregate({ where, _sum: { totalAmount: true } }),
   ])
 
-  return { orders, total }
+  return { orders, total, totalAmount: revenue._sum.totalAmount || 0 }
 }
 
 async function getOrder(prisma, { orderId, companyId }) {

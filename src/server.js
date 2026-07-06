@@ -211,7 +211,7 @@ fastify.after(async () => {
   fastify.register(require('./routes/purchases'), { prefix: '/api/purchases' })
   fastify.register(require('./routes/dashboard-reports'))
   fastify.register(require('./routes/taxRates'), { prefix: '/api/tax-rates' })
-  fastify.register(require('./routes/upload'));
+  fastify.register(require('./routes/upload'), { prefix: '/api' });
 
   // Restaurant platform
   fastify.register(require('./routes/menu-categories'), { prefix: '/api/menu-categories' })
@@ -221,6 +221,7 @@ fastify.after(async () => {
   fastify.register(require('./routes/kitchen'), { prefix: '/api/kitchen' })
   fastify.register(require('./routes/pos'), { prefix: '/api/pos' })
   fastify.register(require('./routes/public'), { prefix: '/api/public' })
+  fastify.register(require('./routes/customerAccount'), { prefix: '/api/customer' })
 
   fastify.register(require("./plugins/subscription.js"), {
     SUBSCRIPTION_BASE_URL: fastify.config.SUBSCRIPTION_BASE_URL,

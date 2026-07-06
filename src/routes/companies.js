@@ -692,4 +692,48 @@ module.exports = async function (fastify, opts) {
         }
     );
 
+    // Brand profile (name + logo) shown in the FE sidebar and everywhere the
+    // CUSTOMER app displays this restaurant. Readable by any staff role,
+    // editable by SUPERADMIN only.
+    fastify.get(
+        "/profile",
+        { preHandler: checkRole("SUPERADMIN", "BRANCHADMIN", "KITCHEN", "CASHIER", "WAITER", "ACCOUNTANT") },
+        async (request, reply) => {
+            try {
+                const company = await fastify.prisma.company.findUnique({
+                    where: { id: request.user.companyId },
+                    select: { id: true, name: true, logoUrlShort: true, logoUrlLong: true },
+                });
+                return reply.send({ statusCode: "00", message: "Company profile fetched successfully", data: company });
+            } catch (err) {
+                request.log.error(err);
+                return reply.code(500).send({ statusCode: "99", message: "Failed to fetch company profile", error: err.message });
+            }
+        }
+    );
+
+    fastify.patch(
+        "/profile/logo",
+        { preHandler: checkRole("SUPERADMIN") },
+        async (request, reply) => {
+            try {
+                const { logoUrl } = request.body;
+                if (!logoUrl) {
+                    return reply.code(400).send({ statusCode: "01", message: "logoUrl is required" });
+                }
+
+                const company = await fastify.prisma.company.update({
+                    where: { id: request.user.companyId },
+                    data: { logoUrlLong: logoUrl, logoUrlShort: logoUrl },
+                    select: { id: true, name: true, logoUrlShort: true, logoUrlLong: true },
+                });
+
+                return reply.send({ statusCode: "00", message: "Company logo updated successfully", data: company });
+            } catch (err) {
+                request.log.error(err);
+                return reply.code(500).send({ statusCode: "99", message: "Failed to update company logo", error: err.message });
+            }
+        }
+    );
+
 }

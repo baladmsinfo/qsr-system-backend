@@ -1,6 +1,7 @@
 'use strict'
 const checkRole = require('../utils/checkRole')
 const { resolveBranchId } = require('../utils/scope')
+const { linkImageToMenuItem, replaceMenuItemImage, deleteMenuItemImages } = require('../services/imageService')
 
 const STAFF = ['SUPERADMIN', 'BRANCHADMIN', 'KITCHEN', 'CASHIER', 'WAITER', 'ACCOUNTANT']
 const MANAGERS = ['SUPERADMIN', 'BRANCHADMIN']
@@ -57,7 +58,7 @@ module.exports = async function (fastify, opts) {
       if (!branchId) return reply.code(400).send({ statusCode: '01', message: 'branchId is required' })
 
       const {
-        name, description, imageUrl, isVeg, price, prepTimeMinutes, kitchenStation,
+        name, description, imageUrl, imageId, isVeg, price, prepTimeMinutes, kitchenStation,
         categoryId, subCategoryId, taxRateId, displayOrder, isRecommended, isPopular,
         spicyLevel, tags, availability,
       } = request.body
@@ -84,6 +85,14 @@ module.exports = async function (fastify, opts) {
           availability: availability || 'AVAILABLE',
         },
       })
+
+      if (imageId) {
+        try {
+          await linkImageToMenuItem(fastify, { imageId, menuItemId: item.id })
+        } catch (imgErr) {
+          request.log.error(imgErr, 'Failed to link image to new menu item')
+        }
+      }
 
       return reply.code(201).send({ statusCode: '00', message: 'Menu item created successfully', data: item })
     } catch (err) {
@@ -112,6 +121,17 @@ module.exports = async function (fastify, opts) {
           spicyLevel, tags, availability,
         },
       })
+
+      // Only touch the linked image if the client explicitly sent an
+      // imageId field (a new photo was uploaded, or the photo was cleared) -
+      // an absent field means "leave the existing photo alone".
+      if ('imageId' in request.body) {
+        try {
+          await replaceMenuItemImage(fastify, { menuItemId: item.id, nextImageId: request.body.imageId || null })
+        } catch (imgErr) {
+          request.log.error(imgErr, 'Failed to replace menu item image')
+        }
+      }
 
       return reply.send({ statusCode: '00', message: 'Menu item updated successfully', data: item })
     } catch (err) {
@@ -173,6 +193,11 @@ module.exports = async function (fastify, opts) {
       const existing = await fastify.prisma.menuItem.findFirst({ where: { id: request.params.id, companyId } })
       if (!existing) return reply.code(404).send({ statusCode: '01', message: 'Menu item not found' })
 
+      try {
+        await deleteMenuItemImages(fastify, existing.id)
+      } catch (imgErr) {
+        request.log.error(imgErr, 'Failed to clean up menu item images before delete')
+      }
       await fastify.prisma.menuItem.delete({ where: { id: request.params.id } })
 
       return reply.send({ statusCode: '00', message: 'Menu item deleted successfully' })

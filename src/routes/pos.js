@@ -1,6 +1,6 @@
 'use strict'
 const checkRole = require('../utils/checkRole')
-const { createOrderPayment, refundOrderPayment } = require('../services/paymentServices')
+const { createOrderPayment, createPrepayment, refundOrderPayment } = require('../services/paymentServices')
 const { resolveBranchId } = require('../utils/scope')
 
 const CASHIERS = ['SUPERADMIN', 'BRANCHADMIN', 'CASHIER']
@@ -13,7 +13,11 @@ module.exports = async function (fastify, opts) {
       const branchId = resolveBranchId(request)
 
       const orders = await fastify.prisma.order.findMany({
-        where: { companyId, ...(branchId ? { branchId } : {}), status: 'SERVED' },
+        // POS-prepaid orders (paid at counter, at the moment of placing the
+        // order) are excluded here - they already have a payment on file
+        // and are billed by simply marking them Completed from Live Orders,
+        // not through this awaiting-bill/pay flow.
+        where: { companyId, ...(branchId ? { branchId } : {}), status: 'SERVED', payments: { none: {} } },
         include: { table: true, orderItems: { include: { menuItem: true } } },
         orderBy: { createdAt: 'asc' },
       })
@@ -65,6 +69,28 @@ module.exports = async function (fastify, opts) {
       })
 
       return reply.code(201).send({ statusCode: '00', message: 'Payment recorded, order completed', data: result })
+    } catch (err) {
+      request.log.error(err)
+      return reply.code(err.statusCode || 500).send({ statusCode: '99', message: err.message })
+    }
+  })
+
+  // Counter (POS) prepayment - pay now, kitchen prepares/serves after
+  fastify.post('/orders/:orderId/prepay', { preHandler: checkRole(...CASHIERS) }, async (request, reply) => {
+    try {
+      const { amount, method, referenceNo, note } = request.body
+
+      const result = await createPrepayment(fastify, {
+        companyId: request.user.companyId,
+        orderId: request.params.orderId,
+        amount,
+        method,
+        referenceNo,
+        note,
+        cashierId: request.user.id,
+      })
+
+      return reply.code(201).send({ statusCode: '00', message: 'Payment recorded', data: result })
     } catch (err) {
       request.log.error(err)
       return reply.code(err.statusCode || 500).send({ statusCode: '99', message: err.message })

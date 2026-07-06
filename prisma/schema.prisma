@@ -70,6 +70,15 @@ enum OrderSource {
   POS
 }
 
+// Fulfillment mode, independent of `source` (source = how/who placed it).
+// DELIVERY is modeled now so the schema doesn't need reshaping later, but no
+// route/UI exposes it yet - no rider/logistics system exists.
+enum OrderType {
+  DINE_IN
+  PICKUP
+  DELIVERY
+}
+
 enum OrderStatus {
   PLACED
   ACCEPTED
@@ -173,6 +182,14 @@ model Company {
 
   logoUrlShort String?
   logoUrlLong  String?
+
+  // Marketplace discovery (CUSTOMER app home page) - a Company is a
+  // browsable restaurant brand; these are independent of the operational
+  // address fields below, which stay HQ/billing address as before.
+  coverImageUrl    String?
+  description      String?
+  cuisineTags      String[] @default([])
+  isPubliclyListed Boolean  @default(true)
 
   addressLine1 String
   addressLine2 String?
@@ -389,15 +406,21 @@ model DiningTable {
   @@unique([branchId, tableNo])
 }
 
+// A Customer is a global identity (can log in and order across many
+// companies via the CUSTOMER app marketplace) - companyId is now only a
+// legacy/first-touch reference, not an ownership scope. Each Order still
+// carries its own companyId independently, so per-company staff routes are
+// unaffected by this.
 model Customer {
-  id          String  @id @default(uuid())
-  name        String
-  email       String?
-  phone       String?
-  otpVerified Boolean @default(false)
+  id           String  @id @default(uuid())
+  name         String
+  email        String? @unique
+  phone        String?
+  passwordHash String?
+  otpVerified  Boolean @default(false)
 
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id])
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
 
   orders Order[]
 
@@ -439,9 +462,10 @@ model Order {
   cashierId String?
   cashier   User?   @relation("OrderCashier", fields: [cashierId], references: [id])
 
-  status OrderStatus @default(PLACED)
-  source OrderSource @default(QR)
-  notes  String?
+  status    OrderStatus @default(PLACED)
+  source    OrderSource @default(QR)
+  orderType OrderType   @default(DINE_IN)
+  notes     String?
 
   kotNumber String?
 

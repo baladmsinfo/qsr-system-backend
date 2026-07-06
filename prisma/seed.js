@@ -67,6 +67,10 @@ async function ensureCompany() {
     state: "Kerala",
     pincode: 680101,
     currency: { connect: { code: "INR" } },
+    coverImageUrl: "https://images.unsplash.com/photo-1610192244261-3f33de3f72e1?w=1200&q=80",
+    description: "Authentic South Indian filter coffee, dosas & tiffin since 1985.",
+    cuisineTags: ["South Indian", "Tiffin", "Filter Coffee"],
+    isPubliclyListed: true,
   };
 
   if (!company) {
@@ -118,6 +122,95 @@ async function ensureBranch(company) {
   }
 
   return branch;
+}
+
+// A second, lightweight restaurant brand purely so the CUSTOMER app's new
+// marketplace home page (nearby-restaurants discovery) has more than one
+// company to sort/browse - no staff/accounting scaffolding needed since
+// this brand is never used for admin/POS testing.
+async function ensureSecondCompany() {
+  const name = "Bucksbox Wok & Roll";
+  let company = await prisma.company.findFirst({ where: { name } });
+
+  const data = {
+    name,
+    companyType: "Cloud Kitchen",
+    primaryEmail: "hello@wokandroll.in",
+    primaryPhoneNo: "9812345670",
+    addressLine1: "Chowara Road",
+    city: "Guruvayur",
+    state: "Kerala",
+    pincode: 680102,
+    currency: { connect: { code: "INR" } },
+    coverImageUrl: "https://images.unsplash.com/photo-1585032226651-759b368d7246?w=1200&q=80",
+    description: "Indo-Chinese wok favorites, fried rice & rolls, made fresh to order.",
+    cuisineTags: ["Chinese", "Indo-Chinese", "Fast Food"],
+    isPubliclyListed: true,
+  };
+
+  if (!company) {
+    company = await prisma.company.create({
+      data: { ...data, shortname: await generateShortTenant(name), tenant: await getShortName(name), publicapiKey: generateApiKey(), privateapiKey: generateApiKey() },
+    });
+  } else {
+    company = await prisma.company.update({ where: { id: company.id }, data });
+  }
+
+  let branch = await prisma.branch.findFirst({ where: { companyId: company.id, name: "Chowara" } });
+  const branchData = {
+    name: "Chowara",
+    companyId: company.id,
+    addressLine1: "Chowara Road, Guruvayur",
+    city: "Guruvayur",
+    state: "Kerala",
+    pincode: 680102,
+    phone: "9812345670",
+    latitude: 10.6021,
+    longitude: 76.035,
+    openingTime: "11:00",
+    closingTime: "23:00",
+    deliveryRadiusKm: 6,
+    isOnline: true,
+    acceptOrders: true,
+    kitchenEnabled: false,
+    posEnabled: false,
+  };
+  branch = branch ? await prisma.branch.update({ where: { id: branch.id }, data: branchData }) : await prisma.branch.create({ data: branchData });
+
+  const menu = [
+    { name: "Veg Fried Rice", price: 140 },
+    { name: "Chilli Paneer", price: 180, recommended: true },
+    { name: "Chicken Manchurian", price: 200, popular: true },
+    { name: "Spring Rolls", price: 120 },
+  ];
+
+  let category = await prisma.menuCategory.findFirst({ where: { companyId: company.id, name: "Wok Favorites" } });
+  if (!category) {
+    category = await prisma.menuCategory.create({ data: { companyId: company.id, name: "Wok Favorites", description: "Indo-Chinese classics", displayOrder: 0 } });
+  }
+
+  for (let i = 0; i < menu.length; i++) {
+    const it = menu[i];
+    const data = {
+      companyId: company.id,
+      branchId: branch.id,
+      categoryId: category.id,
+      name: it.name,
+      isVeg: !/chicken/i.test(it.name),
+      availability: "AVAILABLE",
+      price: it.price,
+      prepTimeMinutes: 15,
+      kitchenStation: "MAIN",
+      displayOrder: i,
+      isRecommended: !!it.recommended,
+      isPopular: !!it.popular,
+    };
+    const existing = await prisma.menuItem.findFirst({ where: { companyId: company.id, branchId: branch.id, name: it.name } });
+    if (!existing) await prisma.menuItem.create({ data });
+    else await prisma.menuItem.update({ where: { id: existing.id }, data });
+  }
+
+  return { company, branch };
 }
 
 async function ensureAccounts(company) {
@@ -594,6 +687,7 @@ async function main() {
 
   const company = await ensureCompany();
   const branch = await ensureBranch(company);
+  await ensureSecondCompany();
   const accounts = await ensureAccounts(company);
   const taxRates = await ensureTaxRates(company);
   const users = await ensureUsers(company, branch);

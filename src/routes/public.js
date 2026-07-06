@@ -1,11 +1,187 @@
 'use strict'
 const svc = require('../services/orderService')
+const { hashPassword, comparePassword } = require('../utils/hash')
 
 /**
- * No-auth routes for the CUSTOMER (QR ordering) app. Registered under
- * /api/public and listed in server.js's publicPaths so they skip the JWT/API-key hook.
+ * No-auth routes for the CUSTOMER (QR ordering + marketplace) app. Registered
+ * under /api/public and listed in server.js's publicPaths so they skip the
+ * JWT/API-key hook. Customer login/register live here too since they need
+ * to be reachable before a token exists; authenticated customer-account
+ * routes (profile, order history) live in routes/customerAccount.js instead,
+ * mounted OUTSIDE /api/public so the normal bearer-token check applies.
  */
+
+// Haversine distance in km - dataset of restaurant branches is small, so a
+// DB-side query + JS sort is simpler and plenty fast (no PostGIS needed).
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 module.exports = async function (fastify, opts) {
+  // ---------------- Marketplace discovery ----------------
+  fastify.get('/companies/nearby', async (request, reply) => {
+    try {
+      const { lat, lng, q, radiusKm } = request.query
+      const hasCoords = lat !== undefined && lng !== undefined
+      const userLat = hasCoords ? Number(lat) : null
+      const userLng = hasCoords ? Number(lng) : null
+      const maxRadius = radiusKm ? Number(radiusKm) : 20
+
+      const companies = await fastify.prisma.company.findMany({
+        where: {
+          isPubliclyListed: true,
+          ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
+          branches: { some: { isOnline: true, acceptOrders: true } },
+        },
+        include: {
+          branches: { where: { isOnline: true, acceptOrders: true } },
+        },
+      })
+
+      const results = companies
+        .map((c) => {
+          let nearestBranch = c.branches[0]
+          let distance = null
+
+          if (hasCoords) {
+            const withDistance = c.branches
+              .filter((b) => b.latitude != null && b.longitude != null)
+              .map((b) => ({ branch: b, distance: distanceKm(userLat, userLng, b.latitude, b.longitude) }))
+              .sort((a, b) => a.distance - b.distance)
+
+            if (withDistance.length) {
+              nearestBranch = withDistance[0].branch
+              distance = Number(withDistance[0].distance.toFixed(2))
+            }
+          }
+
+          return {
+            id: c.id,
+            name: c.name,
+            companyType: c.companyType,
+            logoUrl: c.logoUrlLong || c.logoUrlShort,
+            coverImageUrl: c.coverImageUrl,
+            description: c.description,
+            cuisineTags: c.cuisineTags,
+            distanceKm: distance,
+            nearestBranch: nearestBranch
+              ? { id: nearestBranch.id, name: nearestBranch.name, city: nearestBranch.city, openingTime: nearestBranch.openingTime, closingTime: nearestBranch.closingTime }
+              : null,
+          }
+        })
+        .filter((c) => !hasCoords || c.distanceKm === null || c.distanceKm <= maxRadius)
+        .sort((a, b) => {
+          if (a.distanceKm === null) return 1
+          if (b.distanceKm === null) return -1
+          return a.distanceKm - b.distanceKm
+        })
+
+      return reply.send({ statusCode: '00', message: 'Restaurants fetched successfully', data: results })
+    } catch (err) {
+      request.log.error(err)
+      return reply.code(500).send({ statusCode: '99', message: 'Failed to fetch restaurants', error: err.message })
+    }
+  })
+
+  fastify.get('/companies/:companyId', async (request, reply) => {
+    try {
+      const { lat, lng } = request.query
+      const hasCoords = lat !== undefined && lng !== undefined
+
+      const company = await fastify.prisma.company.findFirst({
+        where: { id: request.params.companyId, isPubliclyListed: true },
+        include: { branches: true },
+      })
+      if (!company) return reply.code(404).send({ statusCode: '01', message: 'Restaurant not found' })
+
+      const branches = company.branches.map((b) => ({
+        id: b.id,
+        name: b.name,
+        addressLine1: b.addressLine1,
+        city: b.city,
+        openingTime: b.openingTime,
+        closingTime: b.closingTime,
+        pickupAvailable: b.isOnline && b.acceptOrders,
+        distanceKm:
+          hasCoords && b.latitude != null && b.longitude != null
+            ? Number(distanceKm(Number(lat), Number(lng), b.latitude, b.longitude).toFixed(2))
+            : null,
+      }))
+
+      return reply.send({
+        statusCode: '00',
+        message: 'Restaurant fetched successfully',
+        data: {
+          id: company.id,
+          name: company.name,
+          companyType: company.companyType,
+          logoUrl: company.logoUrlLong || company.logoUrlShort,
+          coverImageUrl: company.coverImageUrl,
+          description: company.description,
+          cuisineTags: company.cuisineTags,
+          branches,
+        },
+      })
+    } catch (err) {
+      request.log.error(err)
+      return reply.code(500).send({ statusCode: '99', message: 'Failed to fetch restaurant', error: err.message })
+    }
+  })
+
+  // ---------------- Customer auth (email + password, global identity) ----------------
+  fastify.post('/auth/register', async (request, reply) => {
+    try {
+      const { name, email, password, phone } = request.body
+      if (!name || !email || !password) {
+        return reply.code(400).send({ statusCode: '02', message: 'name, email and password are required' })
+      }
+
+      const existing = await fastify.prisma.customer.findUnique({ where: { email } })
+      if (existing) return reply.code(409).send({ statusCode: '03', message: 'An account with this email already exists' })
+
+      const passwordHash = await hashPassword(password)
+      const customer = await fastify.prisma.customer.create({ data: { name, email, phone: phone || null, passwordHash } })
+
+      const token = fastify.jwt.sign({ id: customer.id, role: 'CUSTOMER' })
+      return reply.code(201).send({
+        statusCode: '00',
+        message: 'Account created successfully',
+        token,
+        customer: { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone },
+      })
+    } catch (err) {
+      request.log.error(err)
+      return reply.code(500).send({ statusCode: '99', message: 'Failed to create account', error: err.message })
+    }
+  })
+
+  fastify.post('/auth/login', async (request, reply) => {
+    try {
+      const { email, password } = request.body
+      const customer = await fastify.prisma.customer.findUnique({ where: { email } })
+      if (!customer || !customer.passwordHash || !(await comparePassword(password, customer.passwordHash))) {
+        return reply.code(401).send({ statusCode: '01', message: 'Invalid email or password' })
+      }
+
+      const token = fastify.jwt.sign({ id: customer.id, role: 'CUSTOMER' })
+      return reply.send({
+        statusCode: '00',
+        message: 'Login successful',
+        token,
+        customer: { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone },
+      })
+    } catch (err) {
+      request.log.error(err)
+      return reply.code(500).send({ statusCode: '99', message: 'Login failed', error: err.message })
+    }
+  })
+
   // Customer scans a table QR -> resolve branch + table + whether the branch is currently taking orders
   fastify.get('/qr/:qrCode', async (request, reply) => {
     try {
@@ -79,10 +255,12 @@ module.exports = async function (fastify, opts) {
     }
   })
 
-  // Customer places an order from the QR menu
+  // Customer places an order from the QR menu (dine-in) or the marketplace
+  // app (pickup). Stays fully guest-friendly - a bearer token is optional and
+  // only used to link the order to a logged-in customer's account when present.
   fastify.post('/orders', async (request, reply) => {
     try {
-      const { branchId, tableId, items, customerName, customerPhone, notes } = request.body
+      const { branchId, tableId, items, customerName, customerPhone, notes, orderType } = request.body
 
       const branch = await fastify.prisma.branch.findUnique({ where: { id: branchId } })
       if (!branch) return reply.code(404).send({ statusCode: '01', message: 'Branch not found' })
@@ -91,7 +269,17 @@ module.exports = async function (fastify, opts) {
       }
 
       let customerId = null
-      if (customerName || customerPhone) {
+      const bearer = request.headers.authorization?.split(' ')[1]
+      if (bearer) {
+        try {
+          const decoded = fastify.jwt.verify(bearer)
+          if (decoded.role === 'CUSTOMER') customerId = decoded.id
+        } catch {
+          // Not a valid/expired token - fall through to guest handling below.
+        }
+      }
+
+      if (!customerId && (customerName || customerPhone)) {
         const customer = await fastify.prisma.customer.create({
           data: { companyId: branch.companyId, name: customerName || 'Guest', phone: customerPhone || null },
         })
@@ -104,6 +292,7 @@ module.exports = async function (fastify, opts) {
         tableId,
         customerId,
         source: 'QR',
+        orderType: orderType || 'DINE_IN',
         notes,
         items,
       })
