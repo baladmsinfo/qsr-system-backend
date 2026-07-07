@@ -53,4 +53,27 @@ module.exports = async function (fastify, opts) {
       }
     }
   )
+
+  // The only way a CANCELLED ticket (whole order cancelled, or every item on
+  // it individually cancelled) can be removed from the active Kitchen Display.
+  fastify.patch(
+    '/tickets/:id/dismiss',
+    { preHandler: checkRole('SUPERADMIN', 'BRANCHADMIN', 'KITCHEN') },
+    async (request, reply) => {
+      try {
+        const branchId = resolveBranchId(request)
+
+        const ticket = await svc.dismissTicket(fastify, {
+          ticketId: request.params.id,
+          branchId,
+          actor: { id: request.user.id, role: request.user.role },
+        })
+
+        return reply.send({ statusCode: '00', message: 'Ticket dismissed successfully', data: ticket })
+      } catch (err) {
+        request.log.error(err)
+        return reply.code(err.statusCode || 500).send({ statusCode: '99', message: err.message })
+      }
+    }
+  )
 }

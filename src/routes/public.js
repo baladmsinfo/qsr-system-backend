@@ -3,12 +3,19 @@ const svc = require('../services/orderService')
 const { hashPassword, comparePassword } = require('../utils/hash')
 
 /**
- * No-auth routes for the CUSTOMER (QR ordering + marketplace) app. Registered
- * under /api/public and listed in server.js's publicPaths so they skip the
- * JWT/API-key hook. Customer login/register live here too since they need
- * to be reachable before a token exists; authenticated customer-account
- * routes (profile, order history) live in routes/customerAccount.js instead,
- * mounted OUTSIDE /api/public so the normal bearer-token check applies.
+ * No-auth routes for the CUSTOMER (QR ordering + single-tenant white-label)
+ * app. Registered under /api/public and listed in server.js's publicPaths so
+ * they skip the JWT/API-key hook. Customer login/register live here too
+ * since they need to be reachable before a token exists; authenticated
+ * customer-account routes (profile, order history) live in
+ * routes/customerAccount.js instead, mounted OUTSIDE /api/public so the
+ * normal bearer-token check applies.
+ *
+ * IMPORTANT (multi-tenant isolation): there is deliberately NO route that
+ * lists/searches across companies. The only way to resolve a company from
+ * the CUSTOMER app is by its own tenant slug (GET /tenant/:slug) or by a
+ * QR code that already belongs to one of its tables (GET /qr/:qrCode) - a
+ * customer can never enumerate or browse into another company's data.
  */
 
 // Haversine distance in km - dataset of restaurant branches is small, so a
@@ -24,101 +31,49 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 }
 
 module.exports = async function (fastify, opts) {
-  // ---------------- Marketplace discovery ----------------
-  fastify.get('/companies/nearby', async (request, reply) => {
-    try {
-      const { lat, lng, q, radiusKm } = request.query
-      const hasCoords = lat !== undefined && lng !== undefined
-      const userLat = hasCoords ? Number(lat) : null
-      const userLng = hasCoords ? Number(lng) : null
-      const maxRadius = radiusKm ? Number(radiusKm) : 20
-
-      const companies = await fastify.prisma.company.findMany({
-        where: {
-          isPubliclyListed: true,
-          ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
-          branches: { some: { isOnline: true, acceptOrders: true } },
-        },
-        include: {
-          branches: { where: { isOnline: true, acceptOrders: true } },
-        },
-      })
-
-      const results = companies
-        .map((c) => {
-          let nearestBranch = c.branches[0]
-          let distance = null
-
-          if (hasCoords) {
-            const withDistance = c.branches
-              .filter((b) => b.latitude != null && b.longitude != null)
-              .map((b) => ({ branch: b, distance: distanceKm(userLat, userLng, b.latitude, b.longitude) }))
-              .sort((a, b) => a.distance - b.distance)
-
-            if (withDistance.length) {
-              nearestBranch = withDistance[0].branch
-              distance = Number(withDistance[0].distance.toFixed(2))
-            }
-          }
-
-          return {
-            id: c.id,
-            name: c.name,
-            companyType: c.companyType,
-            logoUrl: c.logoUrlLong || c.logoUrlShort,
-            coverImageUrl: c.coverImageUrl,
-            description: c.description,
-            cuisineTags: c.cuisineTags,
-            distanceKm: distance,
-            nearestBranch: nearestBranch
-              ? { id: nearestBranch.id, name: nearestBranch.name, city: nearestBranch.city, openingTime: nearestBranch.openingTime, closingTime: nearestBranch.closingTime }
-              : null,
-          }
-        })
-        .filter((c) => !hasCoords || c.distanceKm === null || c.distanceKm <= maxRadius)
-        .sort((a, b) => {
-          if (a.distanceKm === null) return 1
-          if (b.distanceKm === null) return -1
-          return a.distanceKm - b.distanceKm
-        })
-
-      return reply.send({ statusCode: '00', message: 'Restaurants fetched successfully', data: results })
-    } catch (err) {
-      request.log.error(err)
-      return reply.code(500).send({ statusCode: '99', message: 'Failed to fetch restaurants', error: err.message })
-    }
-  })
-
-  fastify.get('/companies/:companyId', async (request, reply) => {
+  // ---------------- Tenant resolution (single company, by its own slug) ----------------
+  // The ONLY entry point for a company's branded URL. Returns that company's
+  // profile plus every one of ITS OWN branches (never another company's) -
+  // sorted by distance when lat/lng are given, so the customer app can
+  // auto-suggest the nearest branch or fall back to a full manual list.
+  fastify.get('/tenant/:slug', async (request, reply) => {
     try {
       const { lat, lng } = request.query
       const hasCoords = lat !== undefined && lng !== undefined
 
       const company = await fastify.prisma.company.findFirst({
-        where: { id: request.params.companyId, isPubliclyListed: true },
+        where: { tenant: request.params.slug, isPubliclyListed: true },
         include: { branches: true },
       })
       if (!company) return reply.code(404).send({ statusCode: '01', message: 'Restaurant not found' })
 
-      const branches = company.branches.map((b) => ({
-        id: b.id,
-        name: b.name,
-        addressLine1: b.addressLine1,
-        city: b.city,
-        openingTime: b.openingTime,
-        closingTime: b.closingTime,
-        pickupAvailable: b.isOnline && b.acceptOrders,
-        distanceKm:
-          hasCoords && b.latitude != null && b.longitude != null
-            ? Number(distanceKm(Number(lat), Number(lng), b.latitude, b.longitude).toFixed(2))
-            : null,
-      }))
+      const branches = company.branches
+        .map((b) => ({
+          id: b.id,
+          name: b.name,
+          addressLine1: b.addressLine1,
+          city: b.city,
+          openingTime: b.openingTime,
+          closingTime: b.closingTime,
+          pickupAvailable: b.isOnline && b.acceptOrders,
+          distanceKm:
+            hasCoords && b.latitude != null && b.longitude != null
+              ? Number(distanceKm(Number(lat), Number(lng), b.latitude, b.longitude).toFixed(2))
+              : null,
+        }))
+        .sort((a, b) => {
+          if (a.distanceKm === null && b.distanceKm === null) return a.name.localeCompare(b.name)
+          if (a.distanceKm === null) return 1
+          if (b.distanceKm === null) return -1
+          return a.distanceKm - b.distanceKm
+        })
 
       return reply.send({
         statusCode: '00',
         message: 'Restaurant fetched successfully',
         data: {
           id: company.id,
+          tenant: company.tenant,
           name: company.name,
           companyType: company.companyType,
           logoUrl: company.logoUrlLong || company.logoUrlShort,
@@ -192,7 +147,7 @@ module.exports = async function (fastify, opts) {
             select: {
               id: true, name: true, companyId: true, isOnline: true, acceptOrders: true,
               openingTime: true, closingTime: true, phone: true,
-              company: { select: { name: true, logoUrlShort: true, logoUrlLong: true, companyType: true } },
+              company: { select: { tenant: true, name: true, logoUrlShort: true, logoUrlLong: true, companyType: true } },
             },
           },
         },

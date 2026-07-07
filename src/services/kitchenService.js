@@ -1,6 +1,6 @@
 'use strict'
 
-const { logAudit, ORDER_INCLUDE } = require('./orderService')
+const { logAudit, ORDER_INCLUDE, TICKET_INCLUDE } = require('./orderService')
 
 const TICKET_ITEM_STATUS_MAP = {
   PENDING: 'PENDING',
@@ -33,6 +33,7 @@ async function listTickets(prisma, { branchId, station, status }) {
   return prisma.kitchenTicket.findMany({
     where: {
       order: { branchId },
+      dismissedAt: null,
       ...(station ? { station } : {}),
       ...(status ? { status } : {}),
     },
@@ -87,10 +88,15 @@ async function updateTicketStatus(fastify, { ticketId, branchId, status, actor }
     // Cascade to Order.status: the order only ever moves forward, never backward,
     // and only while it's still in a kitchen-relevant state (ACCEPTED/PREPARING).
     // "Any station started" (max ordinal) promotes to PREPARING; "every station
-    // ready" (min ordinal) promotes to READY.
-    const siblingTickets = ticket.order.kitchenTickets.map((t) => (t.id === ticketId ? { ...t, status } : t))
-    const maxOrdinal = Math.max(...siblingTickets.map((t) => TICKET_ORDINAL[t.status]))
-    const minOrdinal = Math.min(...siblingTickets.map((t) => TICKET_ORDINAL[t.status]))
+    // ready" (min ordinal) promotes to READY. Cancelled tickets represent no
+    // remaining work, so they're excluded from this - a mix of one cancelled
+    // station and one still-active station should cascade purely on the
+    // active one, not get stuck/NaN on the cancelled sibling.
+    const siblingTickets = ticket.order.kitchenTickets
+      .map((t) => (t.id === ticketId ? { ...t, status } : t))
+      .filter((t) => t.status !== 'CANCELLED')
+    const maxOrdinal = siblingTickets.length ? Math.max(...siblingTickets.map((t) => TICKET_ORDINAL[t.status])) : -1
+    const minOrdinal = siblingTickets.length ? Math.min(...siblingTickets.map((t) => TICKET_ORDINAL[t.status])) : -1
 
     if (ticket.order.status === 'ACCEPTED' && maxOrdinal >= TICKET_ORDINAL.PREPARING) {
       await tx.order.update({ where: { id: ticket.orderId }, data: { status: 'PREPARING' } })
@@ -107,7 +113,7 @@ async function updateTicketStatus(fastify, { ticketId, branchId, status, actor }
 
   const updatedTicket = await prisma.kitchenTicket.findUnique({
     where: { id: ticketId },
-    include: { order: { include: { table: true } }, orderItems: { include: { menuItem: true } } },
+    include: TICKET_INCLUDE,
   })
 
   fastify.emitToBranch(branchId, 'kitchen:ticket', updatedTicket)
@@ -123,4 +129,54 @@ async function updateTicketStatus(fastify, { ticketId, branchId, status, actor }
   return updatedTicket
 }
 
-module.exports = { listTickets, updateTicketStatus, TICKET_TRANSITIONS, TICKET_TRANSITION_ROLES }
+const DISMISS_ROLES = ['SUPERADMIN', 'BRANCHADMIN', 'KITCHEN']
+
+/**
+ * Kitchen explicitly acknowledging a fully-cancelled ticket (either the
+ * whole order was cancelled, or every item on this ticket was individually
+ * cancelled - see orderService.cancelOrderItems) - the ONLY way a cancelled
+ * ticket can be removed from the active Kitchen Display. Deliberately a
+ * separate action from updateTicketStatus's forward-only transition table,
+ * since CANCELLED isn't part of that state machine.
+ */
+async function dismissTicket(fastify, { ticketId, branchId, actor }) {
+  const prisma = fastify.prisma
+  const ticket = await prisma.kitchenTicket.findFirst({ where: { id: ticketId, order: { branchId } } })
+  if (!ticket) throw httpError('Kitchen ticket not found', 404)
+
+  if (ticket.status !== 'CANCELLED') {
+    throw httpError('Only a fully cancelled ticket can be dismissed', 400)
+  }
+  if (ticket.dismissedAt) {
+    throw httpError('This ticket has already been dismissed', 400)
+  }
+
+  if (!actor?.role || !DISMISS_ROLES.includes(actor.role)) {
+    throw httpError('Your role is not permitted to dismiss a kitchen ticket', 403)
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.kitchenTicket.update({ where: { id: ticketId }, data: { dismissedAt: new Date() } })
+    await logAudit(tx, {
+      orderId: ticket.orderId,
+      entityType: 'KITCHEN_TICKET',
+      ticketId,
+      fromStatus: 'CANCELLED',
+      toStatus: 'DISMISSED',
+      actor,
+      note: `${ticket.station} station acknowledged cancellation`,
+    })
+  })
+
+  const updatedTicket = await prisma.kitchenTicket.findUnique({
+    where: { id: ticketId },
+    include: TICKET_INCLUDE,
+  })
+
+  fastify.emitToBranch(branchId, 'kitchen:ticket', updatedTicket)
+  fastify.emitToOrder(ticket.orderId, 'kitchen:ticket', updatedTicket)
+
+  return updatedTicket
+}
+
+module.exports = { listTickets, updateTicketStatus, dismissTicket, TICKET_TRANSITIONS, TICKET_TRANSITION_ROLES }

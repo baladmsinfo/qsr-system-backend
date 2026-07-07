@@ -60,7 +60,7 @@ module.exports = async function (fastify, opts) {
       const {
         name, description, imageUrl, imageId, isVeg, price, prepTimeMinutes, kitchenStation,
         categoryId, subCategoryId, taxRateId, displayOrder, isRecommended, isPopular,
-        spicyLevel, tags, availability,
+        spicyLevel, tags, availability, preparationType, unitType, customUnitLabel,
       } = request.body
 
       const item = await fastify.prisma.menuItem.create({
@@ -83,6 +83,9 @@ module.exports = async function (fastify, opts) {
           spicyLevel: spicyLevel ?? 0,
           tags: tags || [],
           availability: availability || 'AVAILABLE',
+          preparationType: preparationType || 'PREPARED_FRESH',
+          unitType: unitType || null,
+          customUnitLabel: unitType === 'CUSTOM' ? customUnitLabel || null : null,
         },
       })
 
@@ -110,7 +113,7 @@ module.exports = async function (fastify, opts) {
       const {
         name, description, imageUrl, isVeg, price, prepTimeMinutes, kitchenStation,
         categoryId, subCategoryId, taxRateId, displayOrder, isRecommended, isPopular,
-        spicyLevel, tags, availability,
+        spicyLevel, tags, availability, preparationType, unitType, customUnitLabel,
       } = request.body
 
       const item = await fastify.prisma.menuItem.update({
@@ -119,6 +122,9 @@ module.exports = async function (fastify, opts) {
           name, description, imageUrl, isVeg, price, prepTimeMinutes, kitchenStation,
           categoryId, subCategoryId, taxRateId, displayOrder, isRecommended, isPopular,
           spicyLevel, tags, availability,
+          preparationType: preparationType || 'PREPARED_FRESH',
+          unitType: unitType || null,
+          customUnitLabel: unitType === 'CUSTOM' ? customUnitLabel || null : null,
         },
       })
 

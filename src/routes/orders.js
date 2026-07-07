@@ -87,6 +87,24 @@ module.exports = async function (fastify, opts) {
     }
   })
 
+  // Partial cancellation - one or more specific items on an order, distinct
+  // from the whole-order CANCELLED transition above.
+  fastify.patch('/:id/items/cancel', { preHandler: checkRole(...STAFF) }, async (request, reply) => {
+    try {
+      const order = await svc.cancelOrderItems(fastify, {
+        orderId: request.params.id,
+        companyId: request.user.companyId,
+        itemIds: request.body.itemIds,
+        actor: { id: request.user.id, role: request.user.role },
+      })
+
+      return reply.send({ statusCode: '00', message: 'Item(s) cancelled successfully', data: order })
+    } catch (err) {
+      request.log.error(err)
+      return reply.code(err.statusCode || 500).send({ statusCode: '99', message: err.message })
+    }
+  })
+
   // Waiter moving a table (guests relocated)
   fastify.patch('/:id/table', { preHandler: checkRole('SUPERADMIN', 'BRANCHADMIN', 'WAITER') }, async (request, reply) => {
     try {

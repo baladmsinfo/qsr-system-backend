@@ -102,6 +102,10 @@ enum KitchenTicketStatus {
   PREPARING
   READY
   COMPLETED
+  // Whole order cancelled, or every item on this ticket individually
+  // cancelled - stays visible on the Kitchen Display (with a clear
+  // indicator) until dismissedAt is set, instead of vanishing silently.
+  CANCELLED
 }
 
 model User {
@@ -271,12 +275,13 @@ model Branch {
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
-  users        User[]
-  diningTables DiningTable[]
-  menuItems    MenuItem[]
-  orders       Order[]
-  expenses     Expense[]
-  purchases    Purchase[]
+  users          User[]
+  diningTables   DiningTable[]
+  menuItems      MenuItem[]
+  menuItemStocks MenuItemStock[]
+  orders         Order[]
+  expenses       Expense[]
+  purchases      Purchase[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -367,6 +372,19 @@ model MenuItem {
   spicyLevel      Int              @default(0)
   tags            String[]         @default([])
 
+  // Whether this item needs kitchen preparation at all - orders only ever
+  // route PREPARED_FRESH items to the Kitchen Display; READY_TO_SERVE items
+  // (e.g. bottled drinks, packaged snacks) are handled automatically with
+  // no kitchen ticket (see orderService.createKitchenTickets).
+  preparationType MenuItemPreparationType @default(PREPARED_FRESH)
+
+  // Optional quantity-based selling: null means a traditional fixed item
+  // (ordered as a whole-number count, exactly like before). When set,
+  // `price` is interpreted as price-per-unit-of-unitType and orders capture
+  // an actual amount in that unit (e.g. 0.5 for "500g" when unitType=KG).
+  unitType        MenuItemUnitType?
+  customUnitLabel String? // only used when unitType = CUSTOM, e.g. "pack", "box"
+
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
@@ -384,9 +402,44 @@ model MenuItem {
 
   orderItems OrderItem[]
   images     Images[]
+  stocks     MenuItemStock[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum MenuItemPreparationType {
+  PREPARED_FRESH
+  READY_TO_SERVE
+}
+
+enum MenuItemUnitType {
+  PIECE
+  GRAM
+  KG
+  ML
+  LITRE
+  CUSTOM
+}
+
+// Per-branch stock level for quantity-based menu items only - traditional
+// fixed items are never tracked here (their availability stays governed by
+// the existing manual AVAILABLE/OUT_OF_STOCK/HIDDEN toggle).
+model MenuItemStock {
+  id String @id @default(uuid())
+
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  quantityAvailable Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([menuItemId, branchId])
 }
 
 model DiningTable {
@@ -514,7 +567,9 @@ model OrderItem {
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
 
   price    Float
-  quantity Int
+  // Float, not Int - quantity-based items (see MenuItem.unitType) can be
+  // ordered in fractional amounts, e.g. 0.5 for "500g" when sold by KG.
+  quantity Float
   remarks  String?
   status   OrderItemStatus @default(PENDING)
   total    Float
@@ -530,12 +585,15 @@ model OrderItem {
 }
 
 model KitchenTicket {
-  id      String              @id @default(uuid())
-  orderId String
-  order   Order               @relation(fields: [orderId], references: [id])
-  token   String
-  station KitchenStation
-  status  KitchenTicketStatus @default(PENDING)
+  id          String              @id @default(uuid())
+  orderId     String
+  order       Order               @relation(fields: [orderId], references: [id])
+  token       String
+  station     KitchenStation
+  status      KitchenTicketStatus @default(PENDING)
+  // Set when kitchen staff explicitly acknowledges a CANCELLED ticket - only
+  // then can it be removed from the active Kitchen Display list.
+  dismissedAt DateTime?
 
   orderItems OrderItem[]
 

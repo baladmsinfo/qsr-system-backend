@@ -3,11 +3,11 @@ const checkRole = require('../utils/checkRole')
 const { ORDER_INCLUDE } = require('../services/orderService')
 
 /**
- * Authenticated customer self-service routes for the CUSTOMER (marketplace)
- * app - profile + cross-company order history. Mounted at /api/customer,
- * deliberately NOT under /api/public, so the existing global bearer-token
- * preHandler in server.js applies normally (see routes/public.js's auth
- * section for where the token is issued).
+ * Authenticated customer self-service routes for the CUSTOMER (white-label)
+ * app - profile + order history. Mounted at /api/customer, deliberately NOT
+ * under /api/public, so the existing global bearer-token preHandler in
+ * server.js applies normally (see routes/public.js's auth section for where
+ * the token is issued).
  */
 module.exports = async function (fastify, opts) {
   fastify.get('/me', { preHandler: checkRole('CUSTOMER') }, async (request, reply) => {
@@ -33,12 +33,15 @@ module.exports = async function (fastify, opts) {
     })
   })
 
-  // Unlike every admin-side order query, this is intentionally NOT scoped to
-  // a single companyId - a logged-in customer's history spans every
-  // restaurant company they've ordered from in the marketplace.
+  // A customer account is a global identity and CAN have ordered from more
+  // than one company, but each white-label tenant's UI must only ever show
+  // that tenant's own orders - the CUSTOMER app always passes ?companyId=
+  // (the resolved tenant's id) when viewing "Your Orders" from within a
+  // tenant's branded pages, scoping the query accordingly.
   fastify.get('/orders', { preHandler: checkRole('CUSTOMER') }, async (request, reply) => {
+    const { companyId } = request.query
     const orders = await fastify.prisma.order.findMany({
-      where: { customerId: request.user.id },
+      where: { customerId: request.user.id, ...(companyId ? { companyId } : {}) },
       include: ORDER_INCLUDE,
       orderBy: { createdAt: 'desc' },
       take: 50,
