@@ -141,9 +141,11 @@ async function priceLines(prisma, companyId, branchId, items) {
     // Quantity-based items (sold by weight/volume/piece-count) draw down a
     // per-branch stock level - the actual atomic decrement + race-safe
     // re-check happens inside createOrder's transaction; this is just a
-    // fast, friendly fail before we even open a transaction.
+    // fast, friendly fail before we even open a transaction. Items marked
+    // trackInventory=false are "unlimited" - always available, stock is
+    // never checked or touched for them.
     const quantity = Number(line.quantity) || 1
-    if (menuItem.unitType) {
+    if (menuItem.unitType && menuItem.trackInventory) {
       const available = menuItem.stocks[0]?.quantityAvailable ?? 0
       if (quantity > available) {
         throw httpError(`Only ${available} ${unitLabel(menuItem)} of ${menuItem.name} available`, 400)
@@ -215,12 +217,16 @@ async function createOrder(fastify, { companyId, branchId, tableId, customerId, 
         },
       })
 
-      // Atomic, race-safe stock deduction for quantity-based items - the
-      // `gte` guard is enforced by the database as part of the same UPDATE,
-      // so two concurrent orders can never both succeed against the last
-      // remaining unit (priceLines' own check above is just a fast, early,
-      // friendlier-message version of this same guarantee).
-      if (line.menuItem.unitType) {
+      // Atomic, race-safe stock deduction for quantity-based, tracked items -
+      // the `gte` guard is enforced by the database as part of the same
+      // UPDATE, so two concurrent orders can never both succeed against the
+      // last remaining unit (priceLines' own check above is just a fast,
+      // early, friendlier-message version of this same guarantee). Items
+      // marked trackInventory=false ("unlimited") never touch stock at all.
+      if (line.menuItem.unitType && line.menuItem.trackInventory) {
+        const before = await tx.menuItemStock.findUnique({ where: { menuItemId_branchId: { menuItemId: line.menuItem.id, branchId } } })
+        const previousQty = before?.quantityAvailable ?? 0
+
         const result = await tx.menuItemStock.updateMany({
           where: { menuItemId: line.menuItem.id, branchId, quantityAvailable: { gte: line.quantity } },
           data: { quantityAvailable: { decrement: line.quantity } },
@@ -228,6 +234,17 @@ async function createOrder(fastify, { companyId, branchId, tableId, customerId, 
         if (result.count === 0) {
           throw httpError(`Only limited ${line.menuItem.name} left - please adjust the quantity`, 400)
         }
+
+        await tx.stockAdjustment.create({
+          data: {
+            menuItemId: line.menuItem.id,
+            branchId,
+            previousQty,
+            newQty: Number((previousQty - line.quantity).toFixed(3)),
+            delta: Number((-line.quantity).toFixed(3)),
+            reason: 'Order placed',
+          },
+        })
       }
     }
 

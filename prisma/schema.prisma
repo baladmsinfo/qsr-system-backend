@@ -128,9 +128,10 @@ model User {
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id])
 
-  waiterOrders   Order[]         @relation("OrderWaiter")
-  cashierOrders  Order[]         @relation("OrderCashier")
-  orderAuditLogs OrderAuditLog[]
+  waiterOrders     Order[]           @relation("OrderWaiter")
+  cashierOrders    Order[]           @relation("OrderCashier")
+  orderAuditLogs   OrderAuditLog[]
+  stockAdjustments StockAdjustment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -275,13 +276,14 @@ model Branch {
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
-  users          User[]
-  diningTables   DiningTable[]
-  menuItems      MenuItem[]
-  menuItemStocks MenuItemStock[]
-  orders         Order[]
-  expenses       Expense[]
-  purchases      Purchase[]
+  users            User[]
+  diningTables     DiningTable[]
+  menuItems        MenuItem[]
+  menuItemStocks   MenuItemStock[]
+  stockAdjustments StockAdjustment[]
+  orders           Order[]
+  expenses         Expense[]
+  purchases        Purchase[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -385,6 +387,12 @@ model MenuItem {
   unitType        MenuItemUnitType?
   customUnitLabel String? // only used when unitType = CUSTOM, e.g. "pack", "box"
 
+  // Only meaningful when unitType is set. true (default) = branch stock is
+  // checked/deducted per order, same as before. false = "unlimited" - the
+  // item stays available and orders never touch MenuItemStock at all, for
+  // products a branch never wants to run out of / doesn't want to track.
+  trackInventory Boolean @default(true)
+
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
@@ -400,9 +408,10 @@ model MenuItem {
   taxRateId String?
   taxRate   TaxRate? @relation(fields: [taxRateId], references: [id])
 
-  orderItems OrderItem[]
-  images     Images[]
-  stocks     MenuItemStock[]
+  orderItems       OrderItem[]
+  images           Images[]
+  stocks           MenuItemStock[]
+  stockAdjustments StockAdjustment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -440,6 +449,32 @@ model MenuItemStock {
   updatedAt DateTime @updatedAt
 
   @@unique([menuItemId, branchId])
+}
+
+// Audit trail for every stock change - manual edits from the Inventory page
+// and automatic deductions when an order is placed - so staff can see who
+// changed what, when, and why.
+model StockAdjustment {
+  id String @id @default(uuid())
+
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  previousQty Float
+  newQty      Float
+  delta       Float
+  reason      String? // e.g. "Manual restock", "Order placed", "Wastage/correction"
+
+  actorId   String?
+  actor     User?   @relation(fields: [actorId], references: [id])
+  actorRole String?
+
+  createdAt DateTime @default(now())
+
+  @@index([menuItemId, branchId, createdAt])
 }
 
 model DiningTable {

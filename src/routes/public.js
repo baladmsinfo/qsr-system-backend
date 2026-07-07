@@ -175,6 +175,7 @@ module.exports = async function (fastify, opts) {
       const categories = await fastify.prisma.menuCategory.findMany({
         where: { companyId: branch.companyId },
         include: {
+          image: true,
           subCategories: { orderBy: { displayOrder: 'asc' } },
           menuItems: {
             where: { branchId, availability: { not: 'HIDDEN' } },
