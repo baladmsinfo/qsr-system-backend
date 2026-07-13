@@ -218,6 +218,7 @@ fastify.after(async () => {
   fastify.register(require('./routes/menu-items'), { prefix: '/api/menu-items' })
   fastify.register(require('./routes/inventory'), { prefix: '/api/inventory' })
   fastify.register(require('./routes/tables'), { prefix: '/api/tables' })
+  fastify.register(require('./routes/menuQr'), { prefix: '/api/menu-qr' })
   fastify.register(require('./routes/orders'), { prefix: '/api/orders' })
   fastify.register(require('./routes/kitchen'), { prefix: '/api/kitchen' })
   fastify.register(require('./routes/pos'), { prefix: '/api/pos' })

@@ -24,7 +24,7 @@ module.exports = async function (fastify, opts) {
   // a SUPERADMIN (company owner) and a BRANCHADMIN for that branch.
   fastify.post("/register", async (request, reply) => {
     try {
-      const { password, company: companyData, branch: branchData } = request.body;
+      const { password, branch_password, company: companyData, branch: branchData } = request.body;
       const { primaryEmail, primaryPhoneNo, secondaryEmail, secondaryPhoneNo } = companyData;
 
       const existingEmail = await fastify.prisma.user.findMany({
@@ -66,16 +66,19 @@ module.exports = async function (fastify, opts) {
         }
       });
 
+      // Branch address defaults to the business address unless the sign-up
+      // form supplied its own (the "Same as business address" toggle on the
+      // Branch Details step controls whether branchData carries these).
       const branch = await fastify.prisma.branch.create({
         data: {
           name: (branchData && branchData.name) || `${company.name} - Main`,
           companyId: company.id,
-          addressLine1: company.addressLine1,
-          addressLine2: company.addressLine2,
-          addressLine3: company.addressLine3,
-          city: company.city,
-          state: company.state,
-          pincode: company.pincode,
+          addressLine1: (branchData && branchData.addressLine1) || company.addressLine1,
+          addressLine2: (branchData && branchData.addressLine2) || company.addressLine2,
+          addressLine3: (branchData && branchData.addressLine3) || company.addressLine3,
+          city: (branchData && branchData.city) || company.city,
+          state: (branchData && branchData.state) || company.state,
+          pincode: (branchData && branchData.pincode) ? Number(branchData.pincode) : company.pincode,
           gstNumber: company.gstNumber,
           phone: primaryPhoneNo,
         }
@@ -99,7 +102,9 @@ module.exports = async function (fastify, opts) {
         data: defaultAccounts.map(a => ({ ...a, companyId: company.id }))
       });
 
-      const branchPassword = generateRandomPassword();
+      // Use the password set on the Branch Details step when provided, else
+      // fall back to an auto-generated one (emailed to the branch admin below).
+      const branchPassword = branch_password || generateRandomPassword();
       const hashedBranchPassword = await bcrypt.hash(branchPassword, 10);
       const hashedPassword = await bcrypt.hash(password, 10);
 

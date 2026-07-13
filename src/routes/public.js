@@ -13,9 +13,10 @@ const { hashPassword, comparePassword } = require('../utils/hash')
  *
  * IMPORTANT (multi-tenant isolation): there is deliberately NO route that
  * lists/searches across companies. The only way to resolve a company from
- * the CUSTOMER app is by its own tenant slug (GET /tenant/:slug) or by a
- * QR code that already belongs to one of its tables (GET /qr/:qrCode) - a
- * customer can never enumerate or browse into another company's data.
+ * the CUSTOMER app is by its own tenant slug (GET /tenant/:slug), by a QR
+ * code that already belongs to one of its tables (GET /qr/:qrCode), or by
+ * a branch's standalone menu-card QR (GET /menu-qr/:code) - a customer can
+ * never enumerate or browse into another company's data.
  */
 
 // Haversine distance in km - dataset of restaurant branches is small, so a
@@ -161,6 +162,30 @@ module.exports = async function (fastify, opts) {
     } catch (err) {
       request.log.error(err)
       return reply.code(500).send({ statusCode: '99', message: 'Failed to resolve QR code', error: err.message })
+    }
+  })
+
+  // Customer scans a branch's standalone Menu QR (read-only menu card, no
+  // table/session involved - the customer orders through a waiter instead)
+  fastify.get('/menu-qr/:code', async (request, reply) => {
+    try {
+      const branch = await fastify.prisma.branch.findUnique({
+        where: { menuQrCode: request.params.code },
+        select: {
+          id: true, name: true, companyId: true, isOnline: true,
+          openingTime: true, closingTime: true, phone: true,
+          company: { select: { tenant: true, name: true, logoUrlShort: true, logoUrlLong: true, companyType: true } },
+        },
+      })
+
+      if (!branch) {
+        return reply.code(404).send({ statusCode: '01', message: 'Menu not found' })
+      }
+
+      return reply.send({ statusCode: '00', message: 'Menu resolved successfully', data: branch })
+    } catch (err) {
+      request.log.error(err)
+      return reply.code(500).send({ statusCode: '99', message: 'Failed to resolve menu QR', error: err.message })
     }
   })
 

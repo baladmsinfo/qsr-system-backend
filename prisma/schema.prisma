@@ -273,6 +273,11 @@ model Branch {
   kitchenEnabled   Boolean @default(true)
   posEnabled       Boolean @default(true)
 
+  // Standalone QR for the branch's read-only menu card (view prices, order via
+  // waiter) - distinct from DiningTable.qrCode, which is per-table and drives
+  // the cart/checkout ordering flow.
+  menuQrCode String? @unique
+
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
