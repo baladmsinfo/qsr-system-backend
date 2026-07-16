@@ -44,7 +44,7 @@ module.exports = async function (fastify, opts) {
 
       const company = await fastify.prisma.company.findFirst({
         where: { tenant: request.params.slug, isPubliclyListed: true },
-        include: { branches: true },
+        include: { branches: true, storefrontContent: true },
       })
       if (!company) return reply.code(404).send({ statusCode: '01', message: 'Restaurant not found' })
 
@@ -82,6 +82,7 @@ module.exports = async function (fastify, opts) {
           description: company.description,
           cuisineTags: company.cuisineTags,
           branches,
+          storefrontContent: company.storefrontContent || null,
         },
       })
     } catch (err) {

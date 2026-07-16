@@ -1,14 +1,707 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Fastify + Tailwind</title>
-    <link rel="stylesheet" href="/assets/tailwind.css" />
-  </head>
-  <body class="bg-gray-100">
-    <div class="max-w-3xl mx-auto p-6">
-      <h1 class="text-4xl font-bold text-sky-600">Hello from Fastify + Tailwind</h1>
-      <p class="mt-4 text-gray-700">Simple setup using the Tailwind CLI.</p>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aghraharam Filter Coffee — Taste the Tradition</title>
+<meta name="description" content="Aghraharam Filter Coffee — authentic South Indian breakfast, tiffin and traditional Filter Coffee near Guruvayur Temple. Pure ingredients, honest cooking." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --coffee-950:#241209;
+    --coffee-900:#331b0d;
+    --coffee-800:#4a2712;
+    --coffee-700:#6b3a1a;
+    --coffee-600:#8a4d22;
+    --gold-500:#c9962f;
+    --gold-400:#e0b354;
+    --gold-300:#f0cf8e;
+    --cream-100:#fdf8ee;
+    --cream-200:#f7ecd8;
+    --cream-300:#f0e1c2;
+    --ink:#2a1c10;
+    --leaf:#5b7a4f;
+    --max-w:1180px;
+    --shadow-soft:0 10px 30px rgba(36,18,9,0.12);
+    --shadow-strong:0 20px 50px rgba(36,18,9,0.25);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    font-family:'Poppins',system-ui,sans-serif;
+    color:var(--ink);
+    background:var(--cream-100);
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  h1,h2,h3,.display{
+    font-family:'Playfair Display',serif;
+    letter-spacing:.2px;
+  }
+  a{color:inherit;text-decoration:none;}
+  img{max-width:100%;display:block;}
+  .wrap{max-width:var(--max-w);margin:0 auto;padding:0 24px;}
+  section{position:relative;}
+  ::selection{background:var(--gold-400);color:var(--coffee-950);}
+
+  /* ---------- decorative bits ---------- */
+  .bean{
+    position:absolute;
+    width:26px;height:34px;
+    border-radius:60% 60% 60% 60%/70% 70% 60% 60%;
+    background:linear-gradient(135deg,var(--coffee-700),var(--coffee-900));
+    opacity:.15;
+  }
+  .bean::after{
+    content:"";
+    position:absolute;inset:0;
+    margin:auto;
+    width:2px;height:80%;
+    background:rgba(255,255,255,.35);
+    border-radius:2px;
+  }
+  .divider{
+    display:flex;align-items:center;justify-content:center;gap:14px;
+    margin:0 auto 18px;
+  }
+  .divider .line{width:38px;height:2px;background:var(--gold-500);border-radius:2px;}
+  .divider .dot{width:7px;height:7px;border-radius:50%;background:var(--gold-500);}
+  .eyebrow{
+    text-transform:uppercase;
+    font-size:12.5px;
+    letter-spacing:3px;
+    font-weight:600;
+    color:var(--gold-500);
+    text-align:center;
+    margin:0 0 8px;
+  }
+  .section-title{
+    text-align:center;
+    font-size:clamp(28px,4vw,42px);
+    color:var(--coffee-950);
+    margin:0 0 6px;
+  }
+  .section-sub{
+    text-align:center;
+    max-width:640px;
+    margin:0 auto 48px;
+    color:#6b5847;
+    font-size:15.5px;
+    line-height:1.7;
+  }
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease, transform .7s ease;}
+  .reveal.in{opacity:1;transform:translateY(0);}
+
+  /* ---------- header ---------- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    padding:18px 0;
+    transition:background .35s ease, padding .35s ease, box-shadow .35s ease;
+  }
+  header .wrap{display:flex;align-items:center;justify-content:space-between;}
+  header.scrolled{
+    background:rgba(253,248,238,.92);
+    backdrop-filter:blur(10px);
+    padding:10px 0;
+    box-shadow:0 6px 24px rgba(36,18,9,.08);
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{
+    width:42px;height:42px;border-radius:50%;overflow:hidden;
+    background:radial-gradient(circle at 35% 30%, var(--gold-300), var(--gold-500) 55%, var(--coffee-800) 100%);
+    display:flex;align-items:center;justify-content:center;
+    font-size:20px;box-shadow:var(--shadow-soft);
+    flex-shrink:0;
+  }
+  .brand .mark img{width:100%;height:100%;object-fit:cover;}
+  .brand .name{line-height:1.1;}
+  .brand .name b{
+    display:block;font-family:'Playfair Display',serif;font-size:18px;color:var(--coffee-950);
+  }
+  .brand .name span{display:block;font-size:10.5px;letter-spacing:2px;color:var(--gold-500);text-transform:uppercase;font-weight:600;}
+  nav.links{display:flex;gap:30px;align-items:center;}
+  nav.links a{
+    font-size:14px;font-weight:500;color:var(--coffee-900);
+    position:relative;padding:4px 0;
+  }
+  nav.links a::after{
+    content:"";position:absolute;left:0;bottom:-2px;width:0;height:2px;background:var(--gold-500);
+    transition:width .25s ease;
+  }
+  nav.links a:hover::after{width:100%;}
+  .cta-btn{
+    background:linear-gradient(135deg,var(--coffee-700),var(--coffee-900));
+    color:var(--cream-100)!important;
+    padding:11px 22px;border-radius:30px;
+    font-size:13.5px;font-weight:600;letter-spacing:.4px;
+    box-shadow:var(--shadow-soft);
+    border:1px solid rgba(255,255,255,.08);
+    transition:transform .25s ease, box-shadow .25s ease;
+    display:inline-block;
+  }
+  .cta-btn:hover{transform:translateY(-2px);box-shadow:var(--shadow-strong);}
+  .cta-ghost{
+    padding:11px 22px;border-radius:30px;border:1.5px solid var(--coffee-800);
+    font-size:13.5px;font-weight:600;color:var(--coffee-900)!important;
+    transition:background .25s ease,color .25s ease;
+  }
+  .cta-ghost:hover{background:var(--coffee-900);color:var(--cream-100)!important;}
+  .burger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:6px;}
+  .burger span{width:24px;height:2px;background:var(--coffee-950);border-radius:2px;}
+
+  /* ---------- hero ---------- */
+  .hero{
+    min-height:100svh;
+    display:flex;align-items:center;
+    padding-top:110px;padding-bottom:70px;
+    background:
+      radial-gradient(circle at 85% 15%, rgba(201,150,47,.18), transparent 45%),
+      radial-gradient(circle at 10% 90%, rgba(107,58,26,.15), transparent 40%),
+      linear-gradient(180deg, var(--cream-100), var(--cream-200));
+    overflow:hidden;
+  }
+  .hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:50px;align-items:center;}
+  .hero-copy .tag{
+    display:inline-flex;align-items:center;gap:8px;
+    background:rgba(201,150,47,.12);
+    border:1px solid rgba(201,150,47,.35);
+    color:var(--coffee-800);
+    font-size:12.5px;font-weight:600;letter-spacing:1px;
+    padding:7px 16px;border-radius:30px;margin-bottom:22px;text-transform:uppercase;
+  }
+  .hero-copy h1{
+    font-size:clamp(36px,5.2vw,58px);
+    line-height:1.12;color:var(--coffee-950);margin:0 0 20px;
+  }
+  .hero-copy h1 em{
+    font-style:normal;color:var(--gold-500);
+    background:linear-gradient(180deg,transparent 65%, rgba(201,150,47,.28) 0);
+  }
+  .hero-copy p{
+    font-size:16px;line-height:1.85;color:#5c4b3b;max-width:520px;margin:0 0 32px;
+  }
+  .hero-actions{display:flex;gap:16px;flex-wrap:wrap;}
+  .hero-stats{display:flex;gap:34px;margin-top:46px;flex-wrap:wrap;}
+  .hero-stats div b{display:block;font-family:'Playfair Display',serif;font-size:26px;color:var(--coffee-950);}
+  .hero-stats div span{font-size:12px;color:#7c6a58;letter-spacing:.5px;}
+
+  .hero-visual{
+    position:relative;height:460px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .cup{
+    position:relative;width:280px;height:280px;border-radius:50%;
+    background:radial-gradient(circle at 32% 28%, #fff8ea, var(--cream-200) 40%, var(--gold-300) 100%);
+    box-shadow:var(--shadow-strong), inset 0 -12px 30px rgba(107,58,26,.15);
+    display:flex;align-items:center;justify-content:center;
+    animation:float 5s ease-in-out infinite;
+  }
+  .cup::before{
+    content:"☕";
+    font-size:120px;
+    filter:drop-shadow(0 10px 12px rgba(36,18,9,.25));
+  }
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
+  .steam{
+    position:absolute;top:-40px;left:50%;transform:translateX(-50%);
+    width:60px;height:80px;opacity:.5;
+  }
+  .steam span{
+    position:absolute;bottom:0;width:6px;height:60px;border-radius:6px;
+    background:linear-gradient(180deg, transparent, rgba(255,255,255,.9));
+    animation:steam 3.4s ease-in-out infinite;
+  }
+  .steam span:nth-child(1){left:6px;animation-delay:0s;}
+  .steam span:nth-child(2){left:27px;animation-delay:.8s;}
+  .steam span:nth-child(3){left:48px;animation-delay:1.6s;}
+  @keyframes steam{
+    0%{transform:translateY(0) scaleX(1);opacity:0;}
+    30%{opacity:.8;}
+    100%{transform:translateY(-70px) scaleX(1.6);opacity:0;}
+  }
+  .ring{
+    position:absolute;border-radius:50%;border:1.5px dashed rgba(201,150,47,.4);
+  }
+  .ring.r1{width:360px;height:360px;}
+  .ring.r2{width:420px;height:420px;border-style:solid;border-color:rgba(107,58,26,.12);}
+
+  /* ---------- promise ---------- */
+  .promise{background:var(--coffee-950);color:var(--cream-100);padding:100px 0;}
+  .promise .section-title{color:var(--cream-100);}
+  .promise .section-sub{color:rgba(253,248,238,.65);}
+  .promise-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px;
+  }
+  .promise-item{
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.09);
+    border-radius:16px;padding:22px 20px;
+    display:flex;gap:14px;align-items:flex-start;
+    transition:transform .25s ease, background .25s ease;
+  }
+  .promise-item:hover{transform:translateY(-4px);background:rgba(255,255,255,.07);}
+  .promise-item .check{
+    flex-shrink:0;width:30px;height:30px;border-radius:50%;
+    background:linear-gradient(135deg,var(--gold-400),var(--gold-500));
+    color:var(--coffee-950);font-weight:700;
+    display:flex;align-items:center;justify-content:center;font-size:14px;
+  }
+  .promise-item p{margin:0;font-size:14.5px;line-height:1.6;color:rgba(253,248,238,.88);}
+
+  /* ---------- story ---------- */
+  .story{padding:110px 0;background:var(--cream-100);}
+  .story .wrap{display:grid;grid-template-columns:.9fr 1.1fr;gap:60px;align-items:center;}
+  .story-visual{
+    position:relative;border-radius:24px;
+    background:linear-gradient(160deg,var(--coffee-800),var(--coffee-950));
+    min-height:380px;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:var(--shadow-strong);
+    overflow:hidden;
+  }
+  .story-visual .quote{
+    color:var(--cream-100);text-align:center;padding:40px;position:relative;z-index:2;
+  }
+  .story-visual .quote b{
+    font-family:'Playfair Display',serif;font-size:26px;display:block;margin-bottom:10px;color:var(--gold-300);
+  }
+  .story-visual .quote span{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:rgba(253,248,238,.6);}
+  .story-copy h2{font-size:clamp(26px,3.6vw,36px);color:var(--coffee-950);margin:0 0 18px;}
+  .story-copy p{font-size:15px;line-height:1.85;color:#5c4b3b;margin:0 0 16px;}
+  .story-copy .pillars{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px;}
+  .pillar{
+    background:var(--cream-200);border-radius:30px;padding:9px 18px;
+    font-size:13px;font-weight:600;color:var(--coffee-800);
+    border:1px solid var(--cream-300);
+  }
+
+  /* ---------- menu teaser (full menu lives on menu.html, fetched from the API) ---------- */
+  .menu-section{padding:110px 0;background:var(--cream-200);}
+  .menu-teaser{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:36px;}
+  .menu-teaser-chip{
+    background:var(--cream-100);border:1px solid var(--cream-300);border-radius:30px;
+    padding:12px 24px;font-size:14px;font-weight:600;color:var(--coffee-800);box-shadow:var(--shadow-soft);
+  }
+
+  /* ---------- filter coffee spotlight ---------- */
+  .spotlight{
+    padding:110px 0;color:var(--cream-100);
+    background:linear-gradient(135deg,var(--coffee-900),var(--coffee-950));
+    position:relative;overflow:hidden;
+  }
+  .spotlight .wrap{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;}
+  .spotlight h2{font-size:clamp(28px,4vw,42px);margin:0 0 20px;color:var(--cream-100);}
+  .spotlight p{font-size:15.5px;line-height:1.9;color:rgba(253,248,238,.75);margin:0 0 16px;}
+  .spotlight .badge-line{font-family:'Playfair Display',serif;font-size:22px;color:var(--gold-300);margin-top:24px;}
+  .filter-graphic{
+    display:flex;align-items:center;justify-content:center;
+    height:320px;position:relative;
+  }
+  .tumbler{
+    width:140px;height:200px;
+    background:linear-gradient(160deg,#e7c98a,#c9962f);
+    border-radius:20px 20px 60px 60px/20px 20px 90px 90px;
+    box-shadow:var(--shadow-strong);
+    position:relative;
+  }
+  .davarah{
+    width:170px;height:36px;border-radius:50%;
+    background:linear-gradient(160deg,#f0cf8e,#c9962f);
+    position:absolute;top:-18px;left:50%;transform:translateX(-50%);
+    box-shadow:var(--shadow-soft);
+  }
+
+  /* ---------- why choose ---------- */
+  .why{padding:110px 0;background:var(--cream-100);}
+  .why-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:22px;}
+  .why-card{
+    background:var(--cream-100);border:1px solid var(--cream-300);border-radius:18px;
+    padding:32px 26px;transition:transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+  }
+  .why-card:hover{transform:translateY(-6px);box-shadow:var(--shadow-soft);border-color:var(--gold-400);}
+  .why-card .icon{
+    width:52px;height:52px;border-radius:14px;
+    background:linear-gradient(135deg,var(--gold-300),var(--gold-500));
+    display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:18px;
+  }
+  .why-card h3{font-size:18px;margin:0 0 8px;color:var(--coffee-950);}
+  .why-card p{font-size:14px;line-height:1.65;color:#6b5847;margin:0;}
+
+  /* ---------- locations ---------- */
+  .locations{padding:110px 0;background:var(--coffee-950);color:var(--cream-100);}
+  .locations .section-title{color:var(--cream-100);}
+  .locations .section-sub{color:rgba(253,248,238,.65);}
+  .loc-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:26px;}
+  .loc-card{
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+    border-radius:20px;padding:34px;
+  }
+  .loc-card h3{margin:0 0 12px;font-size:22px;color:var(--gold-300);}
+  .loc-card p{font-size:14.5px;line-height:1.8;color:rgba(253,248,238,.78);margin:0 0 8px;}
+  .loc-card .pin{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--gold-300);font-weight:600;margin-bottom:16px;}
+  .loc-card.soon{display:flex;flex-direction:column;justify-content:center;text-align:center;}
+  .loc-card.soon .icon{font-size:34px;margin-bottom:12px;}
+  .feature-strip{
+    margin-top:26px;background:rgba(240,207,142,.08);border:1px solid rgba(240,207,142,.25);
+    border-radius:20px;padding:30px 34px;display:flex;gap:22px;align-items:center;flex-wrap:wrap;
+  }
+  .feature-strip .ribbon{
+    flex-shrink:0;width:64px;height:64px;border-radius:50%;
+    background:linear-gradient(135deg,var(--gold-300),var(--gold-500));
+    display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--coffee-950);
+  }
+  .feature-strip p{margin:6px 0 0;font-size:14px;line-height:1.75;color:rgba(253,248,238,.75);max-width:720px;}
+  .feature-strip b{color:var(--gold-300);font-family:'Playfair Display',serif;font-size:18px;}
+
+  /* ---------- reviews ---------- */
+  .reviews{padding:110px 0;background:var(--cream-200);}
+  .review-top{
+    display:flex;justify-content:center;gap:6px;margin-bottom:10px;
+  }
+  .review-top span{color:var(--gold-500);font-size:22px;}
+  .review-list{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;
+    max-width:900px;margin:0 auto 44px;
+  }
+  .review-chip{
+    background:var(--cream-100);border-radius:14px;padding:16px 18px;
+    font-size:13.5px;color:var(--coffee-900);font-weight:500;
+    border-left:3px solid var(--gold-500);box-shadow:var(--shadow-soft);
+  }
+  .review-actions{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;}
+
+  /* ---------- contact ---------- */
+  .contact{padding:110px 0;background:var(--cream-100);}
+  .contact .wrap{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:stretch;}
+  .contact-copy h2{font-size:clamp(26px,3.6vw,36px);color:var(--coffee-950);margin:0 0 16px;}
+  .contact-copy p{font-size:15px;line-height:1.85;color:#5c4b3b;margin:0 0 26px;}
+  .hours-card{
+    background:var(--coffee-950);color:var(--cream-100);border-radius:20px;padding:30px;
+    display:flex;flex-direction:column;gap:18px;justify-content:center;
+  }
+  .hours-row{display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.1);}
+  .hours-row:last-child{border-bottom:none;padding-bottom:0;}
+  .hours-row .label{font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold-300);font-weight:600;}
+  .hours-row .time{font-family:'Playfair Display',serif;font-size:19px;}
+  .hours-open{
+    align-self:flex-start;background:rgba(240,207,142,.15);border:1px solid rgba(240,207,142,.4);
+    color:var(--gold-300);font-size:12px;font-weight:600;letter-spacing:1px;padding:6px 14px;border-radius:20px;
+  }
+
+  /* ---------- philosophy ---------- */
+  .philosophy{padding:110px 0;background:var(--cream-200);text-align:center;}
+  .philosophy .creed{
+    max-width:720px;margin:0 auto;font-family:'Playfair Display',serif;
+    font-size:clamp(20px,2.6vw,28px);line-height:1.7;color:var(--coffee-950);
+  }
+  .philosophy .creed span{display:block;}
+  .philosophy .creed .accent{color:var(--gold-500);}
+
+  /* ---------- footer ---------- */
+  footer{background:var(--coffee-950);color:rgba(253,248,238,.6);padding:50px 0 26px;text-align:center;}
+  footer .brand{justify-content:center;margin-bottom:14px;}
+  footer .foot-tag{font-family:'Playfair Display',serif;color:var(--gold-300);font-size:16px;margin-bottom:20px;}
+  footer .fine{font-size:12.5px;letter-spacing:.4px;}
+
+  /* ---------- back to top ---------- */
+  #toTop{
+    position:fixed;right:26px;bottom:26px;z-index:90;
+    width:46px;height:46px;border-radius:50%;
+    background:var(--coffee-900);color:var(--cream-100);
+    display:flex;align-items:center;justify-content:center;font-size:18px;
+    box-shadow:var(--shadow-soft);border:none;cursor:pointer;
+    opacity:0;pointer-events:none;transform:translateY(10px);
+    transition:opacity .3s ease, transform .3s ease;
+  }
+  #toTop.show{opacity:1;pointer-events:auto;transform:translateY(0);}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:960px){
+    .hero .wrap,.story .wrap,.spotlight .wrap,.loc-grid,.contact .wrap{grid-template-columns:1fr;}
+    .hero-visual{height:320px;order:-1;}
+    .story-visual{min-height:260px;}
+    nav.links{position:fixed;top:0;right:0;height:100vh;width:min(78vw,320px);
+      background:var(--cream-100);flex-direction:column;justify-content:center;gap:28px;
+      transform:translateX(100%);transition:transform .35s ease;box-shadow:var(--shadow-strong);
+    }
+    nav.links.open{transform:translateX(0);}
+    .burger{display:flex;}
+    header .wrap .cta-btn{display:none;}
+  }
+  @media (max-width:600px){
+    .hero-actions{flex-direction:column;align-items:stretch;}
+    .hero-actions a{text-align:center;}
+  }
+</style>
+</head>
+<body>
+
+<!-- decorative floating beans -->
+<div class="bean" style="top:14%;left:4%;transform:rotate(20deg);"></div>
+<div class="bean" style="top:60%;left:92%;transform:rotate(-15deg);"></div>
+
+<header id="siteHeader">
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark"><img src="assets/logo.png" alt="Aghraharam Filter Coffee logo" onerror="this.style.display='none'"></div>
+      <div class="name">
+        <b>Aghraharam</b>
+        <span>Filter Coffee</span>
+      </div>
     </div>
-  </body>
+    <nav class="links" id="navLinks">
+      <a href="#home" class="nav-link">Home</a>
+      <a href="#promise" class="nav-link">Our Promise</a>
+      <a href="#story" class="nav-link">Our Story</a>
+      <a href="menu.html" class="nav-link">Menu</a>
+      <a href="#locations" class="nav-link">Locations</a>
+      <a href="#contact" class="nav-link">Contact</a>
+    </nav>
+    <a href="menu.html" class="cta-btn">View Menu</a>
+    <button class="burger" id="burgerBtn" aria-label="Open menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<section class="hero" id="home">
+  <div class="ring r1" style="right:-40px;top:60px;"></div>
+  <div class="ring r2" style="right:-90px;top:20px;"></div>
+  <div class="wrap">
+    <div class="hero-copy reveal">
+      <div class="tag">Pure Vegetarian · Since Guruvayur</div>
+      <h1>Taste the Tradition,<br>Sip by <em>Sip.</em></h1>
+      <p>Where every meal begins with purity and ends with satisfaction. Freshly prepared breakfast, evening tiffin, dinner and our signature Filter Coffee — inspired by the timeless traditions of South Indian Aghraharams.</p>
+      <div class="hero-actions">
+        <a href="menu.html" class="cta-btn">Explore the Menu</a>
+        <a href="#locations" class="cta-ghost">Find Us</a>
+      </div>
+      <div class="hero-stats">
+        <div><b>100%</b><span>Pure Vegetarian</span></div>
+        <div><b>0</b><span>Reused Cooking Oil</span></div>
+        <div><b>2×</b><span>Daily Fresh Batter</span></div>
+      </div>
+    </div>
+    <div class="hero-visual reveal">
+      <div class="ring r1"></div>
+      <div class="cup">
+        <div class="steam"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="promise" id="promise">
+  <div class="wrap">
+    <p class="eyebrow">Our Promise</p>
+    <h2 class="section-title">Purity in Every Ingredient</h2>
+    <div class="divider"><span class="line"></span><span class="dot"></span><span class="line"></span></div>
+    <p class="section-sub">Great food starts with great ingredients. That's why we carefully select everything that enters our kitchen.</p>
+    <div class="promise-grid">
+      <div class="promise-item reveal"><span class="check">✓</span><p>Premium quality rice and lentils</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Pure ghee for our signature specialties</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Fresh vegetables sourced daily</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Freshly ground spices</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Premium coffee beans</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Quality sunflower oil for cooking</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Cooking oil is never reused</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Fresh batter prepared with care</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>Hygienic kitchen and food preparation</p></div>
+      <div class="promise-item reveal"><span class="check">✓</span><p>No compromise on taste or quality</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="story" id="story">
+  <div class="wrap">
+    <div class="story-visual reveal">
+      <div class="quote">
+        <b>"Aghraharam"</b>
+        <span>Heritage · Simplicity · Community</span>
+      </div>
+    </div>
+    <div class="story-copy reveal">
+      <p class="eyebrow" style="text-align:left;">Our Story</p>
+      <h2>Tradition Served Every Day</h2>
+      <p>Aghraharam Filter Coffee was born from a simple dream — to preserve the authentic taste of South Indian tiffin and traditional Filter Coffee, while serving every guest with warmth and hospitality.</p>
+      <p>The name "Aghraharam" represents heritage, simplicity, community, and timeless traditions. Those values continue to inspire everything we do.</p>
+      <p>From our first outlet in Guruvayur to our growing journey, our focus has remained the same — serve honest food, use quality ingredients, respect tradition, and delight every customer.</p>
+      <div class="pillars">
+        <span class="pillar">Serve Honest Food</span>
+        <span class="pillar">Use Quality Ingredients</span>
+        <span class="pillar">Respect Tradition</span>
+        <span class="pillar">Delight Every Customer</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="menu-section" id="menu">
+  <div class="wrap">
+    <p class="eyebrow">Our Specialities</p>
+    <h2 class="section-title">Taste the Tradition</h2>
+    <div class="divider"><span class="line"></span><span class="dot"></span><span class="line"></span></div>
+    <p class="section-sub">Pure vegetarian favorites — from soft idlys and crisp dosas to our beloved Filter Coffee.</p>
+
+    <div class="menu-teaser">
+      <div class="menu-teaser-chip">🍽️ Tiffin &amp; Idly</div>
+      <div class="menu-teaser-chip">🥞 Dosa &amp; Uthappam</div>
+      <div class="menu-teaser-chip">☕ Filter Coffee &amp; Drinks</div>
+    </div>
+    <div style="text-align:center;">
+      <a href="menu.html" class="cta-btn">View Full Menu</a>
+    </div>
+  </div>
+</section>
+
+<section class="spotlight" id="coffee">
+  <div class="wrap">
+    <div class="spotlight-copy reveal">
+      <p class="eyebrow" style="text-align:left;">Our Filter Coffee</p>
+      <h2>Brewed the Traditional Way</h2>
+      <p>Our signature Filter Coffee is prepared using premium coffee beans and the traditional South Indian brewing method.</p>
+      <p>Freshly brewed decoction, perfectly heated milk, and just the right balance create the rich aroma and unforgettable taste that coffee lovers cherish.</p>
+      <div class="badge-line">It's not just coffee. Tradition served in every cup.</div>
+    </div>
+    <div class="filter-graphic reveal">
+      <div class="ring r1" style="border-color:rgba(240,207,142,.25);"></div>
+      <div class="tumbler"><div class="davarah"></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="why" id="why">
+  <div class="wrap">
+    <p class="eyebrow">Why Choose Aghraharam</p>
+    <h2 class="section-title">Because quality isn't an option. It's our standard.</h2>
+    <div class="divider"><span class="line"></span><span class="dot"></span><span class="line"></span></div>
+    <div class="why-grid">
+      <div class="why-card reveal"><div class="icon">🔥</div><h3>Freshly Prepared</h3><p>Food is prepared throughout the day to ensure freshness in every serving.</p></div>
+      <div class="why-card reveal"><div class="icon">🌿</div><h3>Pure Ingredients</h3><p>Only carefully selected ingredients are allowed to enter our kitchen.</p></div>
+      <div class="why-card reveal"><div class="icon">📜</div><h3>Traditional Recipes</h3><p>Authentic flavors inspired by generations of South Indian cooking.</p></div>
+      <div class="why-card reveal"><div class="icon">✨</div><h3>Hygiene First</h3><p>Every meal is prepared in a clean, hygienic environment.</p></div>
+      <div class="why-card reveal"><div class="icon">👨‍👩‍👧‍👦</div><h3>Family Friendly</h3><p>A welcoming destination for families, pilgrims, tourists and food lovers.</p></div>
+      <div class="why-card reveal"><div class="icon">⚡</div><h3>Quick Service</h3><p>Traditional food, served with modern efficiency.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="locations" id="locations">
+  <div class="wrap">
+    <p class="eyebrow">Our Locations</p>
+    <h2 class="section-title">Visit Us</h2>
+    <div class="divider"><span class="line"></span><span class="dot"></span><span class="line"></span></div>
+    <div class="loc-grid">
+      <div class="loc-card reveal">
+        <div class="pin">📍 West Nada, Guruvayur</div>
+        <h3>West Nada Outlet</h3>
+        <p>Located close to Guruvayur Temple, our original outlet has become a favorite destination for authentic breakfast, evening tiffin, and Filter Coffee.</p>
+        <p>Whether you're dining in or taking away, you'll enjoy the same authentic taste and uncompromising quality.</p>
+      </div>
+      <div class="loc-card soon reveal">
+        <div class="icon">🚀</div>
+        <h3>We're Expanding Soon!</h3>
+        <p>The authentic taste of Aghraharam is reaching more locations. Stay tuned for exciting announcements and new outlets. Follow us on social media for updates.</p>
+      </div>
+    </div>
+    <div class="feature-strip reveal">
+      <div class="ribbon">🏆</div>
+      <div>
+        <b>Featured in Vanitha Pachakam — March 2026</b>
+        <p>We are honored to have been featured in the March 2026 edition of Vanitha Pachakam, the renowned food and culinary magazine from Malayala Manorama, under its Famous Restaurant category. This recognition reflects our unwavering commitment to serving authentic South Indian cuisine prepared with pure ingredients, honest cooking, and traditional recipes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="reviews" id="reviews">
+  <div class="wrap">
+    <p class="eyebrow">What Our Customers Say</p>
+    <h2 class="section-title">Trusted by Thousands</h2>
+    <div class="divider"><span class="line"></span><span class="dot"></span><span class="line"></span></div>
+    <p class="section-sub">The greatest recognition we receive is the trust and appreciation of our customers.</p>
+    <div class="review-top">★★★★★</div>
+    <div class="review-list">
+      <div class="review-chip reveal">Authentic South Indian flavors</div>
+      <div class="review-chip reveal">Rich and aromatic Filter Coffee</div>
+      <div class="review-chip reveal">Freshly prepared breakfast and tiffin</div>
+      <div class="review-chip reveal">Hygienic food preparation</div>
+      <div class="review-chip reveal">Pure ingredients, consistent quality</div>
+      <div class="review-chip reveal">Friendly service, warm hospitality</div>
+    </div>
+    <div class="review-actions">
+      <a href="#contact" class="cta-btn">Read Google Reviews</a>
+      <a href="#contact" class="cta-ghost">Write a Google Review</a>
+    </div>
+  </div>
+</section>
+
+<section class="contact" id="contact">
+  <div class="wrap">
+    <div class="contact-copy reveal">
+      <p class="eyebrow" style="text-align:left;">Contact</p>
+      <h2>We'd Love to Welcome You</h2>
+      <p>Whether you're visiting us for breakfast, enjoying our famous Filter Coffee, planning a family meal, or exploring franchise opportunities, our team is here to help.</p>
+      <p>Visit us and experience food prepared with care, ingredients chosen with integrity, and flavors rooted in tradition.</p>
+      <a href="#locations" class="cta-btn">Get Directions</a>
+    </div>
+    <div class="hours-card reveal">
+      <span class="hours-open">Open All Days</span>
+      <div class="hours-row"><span class="label">Morning</span><span class="time">8:00 AM – 12:30 PM</span></div>
+      <div class="hours-row"><span class="label">Evening</span><span class="time">5:00 PM – 10:00 PM</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="philosophy" id="philosophy">
+  <div class="wrap">
+    <p class="eyebrow">Our Philosophy</p>
+    <h2 class="section-title">Pure Ingredients. Honest Cooking. Authentic Taste.</h2>
+    <div class="divider"><span class="line"></span><span class="dot"></span><span class="line"></span></div>
+    <p class="creed reveal">
+      <span>Use the finest ingredients. Cook with care.</span>
+      <span>Never compromise on quality.</span>
+      <span class="accent">Use pure ghee and butter. Never reuse cooking oil.</span>
+      <span>Serve every guest with warmth and respect.</span>
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="brand"><div class="mark">☕</div><div class="name" style="text-align:left;"><b>Aghraharam</b><span>Filter Coffee</span></div></div>
+    <div class="foot-tag">Taste the Tradition!</div>
+    <div class="fine">© 2026 Aghraharam Filter Coffee · West Nada, Guruvayur · Pure Vegetarian</div>
+  </div>
+</footer>
+
+<button id="toTop" aria-label="Back to top">↑</button>
+
+<script>
+  // header shrink on scroll
+  const header = document.getElementById('siteHeader');
+  const toTop = document.getElementById('toTop');
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    header.classList.toggle('scrolled', y > 30);
+    toTop.classList.toggle('show', y > 500);
+  });
+
+  // mobile nav
+  const burger = document.getElementById('burgerBtn');
+  const navLinks = document.getElementById('navLinks');
+  burger.addEventListener('click', () => navLinks.classList.toggle('open'));
+  navLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', () => navLinks.classList.remove('open')));
+
+  // back to top
+  toTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+  // reveal on scroll
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
 </html>

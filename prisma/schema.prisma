@@ -179,6 +179,8 @@ model Company {
   expenses       Expense[]
   purchases      Purchase[]
 
+  storefrontContent StorefrontContent?
+
   trial            Boolean @default(true)
   primaryEmail     String
   secondaryEmail   String?
@@ -248,6 +250,40 @@ model Banner {
   image   Images @relation(fields: [imageId], references: [id])
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Tenant-editable public landing-page content (CUSTOMER app storefront home
+// page), managed from qsr-system-admin. Optional 1:1 with Company - a tenant
+// with no row here still gets a sensible generic storefront (frontend falls
+// back to defaults when fields are empty).
+model StorefrontContent {
+  id        String  @id @default(uuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id])
+
+  heroTag      String?
+  heroHeadline String?
+  heroSubtext  String?
+  heroImageUrl String?
+
+  promiseTitle    String?
+  promiseSubtitle String?
+  promiseItems    String[] @default([])
+
+  storyTitle   String?
+  storyBody    String?
+  storyPillars String[] @default([])
+
+  whyChooseTitle String?
+  whyChooseItems Json    @default("[]") // [{ icon, title, body }]
+
+  philosophyTitle String?
+  philosophyLines String[] @default([])
+
+  testimonialsTitle String?
+  testimonials      Json    @default("[]") // [{ quote, author }]
+
   updatedAt DateTime @updatedAt
 }
 

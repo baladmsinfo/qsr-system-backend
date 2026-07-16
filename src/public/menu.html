@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Menu — Aghraharam Filter Coffee</title>
+<meta name="description" content="Full menu — Aghraharam Filter Coffee. Freshly prepared tiffin, dosa and traditional Filter Coffee." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --coffee-950:#241209;
+    --coffee-900:#331b0d;
+    --coffee-800:#4a2712;
+    --coffee-700:#6b3a1a;
+    --coffee-600:#8a4d22;
+    --gold-500:#c9962f;
+    --gold-400:#e0b354;
+    --gold-300:#f0cf8e;
+    --cream-100:#fdf8ee;
+    --cream-200:#f7ecd8;
+    --cream-300:#f0e1c2;
+    --ink:#2a1c10;
+    --max-w:1180px;
+    --shadow-soft:0 10px 30px rgba(36,18,9,0.12);
+    --shadow-strong:0 20px 50px rgba(36,18,9,0.25);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    font-family:'Poppins',system-ui,sans-serif;
+    color:var(--ink);
+    background:var(--cream-100);
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{font-family:'Playfair Display',serif;}
+  a{color:inherit;text-decoration:none;}
+  img{max-width:100%;display:block;}
+  .wrap{max-width:var(--max-w);margin:0 auto;padding:0 24px;}
+
+  /* ---------- header (shared brand chrome) ---------- */
+  header{
+    position:sticky;top:0;left:0;right:0;z-index:100;
+    background:rgba(253,248,238,.94);backdrop-filter:blur(10px);
+    box-shadow:0 6px 24px rgba(36,18,9,.08);
+    padding:14px 0;
+  }
+  header .wrap{display:flex;align-items:center;justify-content:space-between;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{
+    width:42px;height:42px;border-radius:50%;overflow:hidden;
+    background:radial-gradient(circle at 35% 30%, var(--gold-300), var(--gold-500) 55%, var(--coffee-800) 100%);
+    display:flex;align-items:center;justify-content:center;
+    font-size:20px;box-shadow:var(--shadow-soft);flex-shrink:0;
+  }
+  .brand .mark img{width:100%;height:100%;object-fit:cover;}
+  .brand .name{line-height:1.1;}
+  .brand .name b{display:block;font-family:'Playfair Display',serif;font-size:18px;color:var(--coffee-950);}
+  .brand .name span{display:block;font-size:10.5px;letter-spacing:2px;color:var(--gold-500);text-transform:uppercase;font-weight:600;}
+  .back-link{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--coffee-900);}
+
+  /* ---------- page hero ---------- */
+  .menu-hero{padding:56px 0 20px;text-align:center;}
+  .eyebrow{
+    text-transform:uppercase;font-size:12.5px;letter-spacing:3px;font-weight:600;
+    color:var(--gold-500);margin:0 0 8px;
+  }
+  .menu-hero h1{font-size:clamp(30px,4.5vw,46px);color:var(--coffee-950);margin:0 0 10px;}
+  .menu-hero p{color:#6b5847;font-size:15px;max-width:560px;margin:0 auto;}
+  .divider{display:flex;align-items:center;justify-content:center;gap:14px;margin:22px auto;}
+  .divider .line{width:38px;height:2px;background:var(--gold-500);border-radius:2px;}
+  .divider .dot{width:7px;height:7px;border-radius:50%;background:var(--gold-500);}
+
+  /* ---------- category tabs (rendered from API data) ---------- */
+  .tabs{display:flex;justify-content:center;gap:10px;margin:0 0 40px;flex-wrap:wrap;padding:0 24px;}
+  .tab-btn{
+    padding:11px 24px;border-radius:30px;border:1.5px solid var(--coffee-800);
+    background:transparent;font-family:'Poppins',sans-serif;font-weight:600;font-size:13.5px;
+    color:var(--coffee-900);cursor:pointer;transition:all .25s ease;
+  }
+  .tab-btn.active,.tab-btn:hover{background:var(--coffee-900);color:var(--cream-100);border-color:var(--coffee-900);}
+
+  main{padding-bottom:100px;}
+  .menu-panel{display:none;}
+  .menu-panel.active{display:block;animation:fadein .4s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+  .sub-heading{
+    font-size:13px;text-transform:uppercase;letter-spacing:2px;font-weight:700;
+    color:var(--gold-500);margin:32px 0 14px;
+  }
+  .sub-heading:first-child{margin-top:0;}
+  .menu-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+    gap:14px 40px;
+    background:var(--cream-100);border-radius:24px;padding:32px;
+    box-shadow:var(--shadow-soft);
+  }
+  .menu-row{
+    display:flex;align-items:flex-start;gap:10px;
+    padding:12px 0;border-bottom:1px dashed var(--cream-300);
+  }
+  .menu-row:last-child{border-bottom:none;}
+  .veg-dot{
+    flex-shrink:0;width:13px;height:13px;border:1.5px solid;border-radius:3px;
+    display:flex;align-items:center;justify-content:center;margin-top:4px;
+  }
+  .veg-dot.veg{border-color:#1e7a34;}
+  .veg-dot.veg::after{content:"";width:6px;height:6px;border-radius:50%;background:#1e7a34;}
+  .veg-dot.nonveg{border-color:#b3261e;}
+  .veg-dot.nonveg::after{content:"";width:6px;height:6px;border-radius:50%;background:#b3261e;}
+  .row-body{flex:1;min-width:0;}
+  .row-top{display:flex;align-items:baseline;gap:8px;}
+  .item-name{font-size:15px;font-weight:600;color:var(--coffee-950);}
+  .leader{flex:1;border-bottom:1px dotted #c9b8a2;height:0;transform:translateY(-4px);}
+  .price{font-weight:700;color:var(--gold-500);font-size:15px;white-space:nowrap;font-family:'Playfair Display',serif;}
+  .item-desc{font-size:12.5px;color:#8a7864;margin:4px 0 0;line-height:1.5;}
+  .item-tags{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .tag-pill{
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+    padding:2px 8px;border-radius:20px;
+  }
+  .tag-pill.rec{background:rgba(201,150,47,.15);color:var(--coffee-800);}
+  .tag-pill.popular{background:rgba(179,38,30,.1);color:#b3261e;}
+  .tag-pill.oos{background:rgba(0,0,0,.06);color:#8a7864;}
+  .menu-row.is-oos{opacity:.55;}
+
+  /* ---------- state screens ---------- */
+  .state{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:100px 24px;gap:14px;
+  }
+  .state .icon{font-size:44px;}
+  .state h2{font-size:20px;color:var(--coffee-950);margin:0;}
+  .state p{color:#8a7864;font-size:14px;max-width:420px;margin:0;}
+  .spinner{
+    width:36px;height:36px;border-radius:50%;
+    border:3px solid var(--cream-300);border-top-color:var(--gold-500);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .retry-btn{
+    margin-top:6px;background:var(--coffee-900);color:var(--cream-100);
+    padding:10px 22px;border-radius:30px;border:none;font-weight:600;font-size:13.5px;cursor:pointer;
+  }
+
+  footer{background:var(--coffee-950);color:rgba(253,248,238,.6);padding:34px 0;text-align:center;font-size:12.5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark">
+        <img src="assets/logo.png" alt="Aghraharam Filter Coffee logo" onerror="this.style.display='none'">
+      </div>
+      <div class="name">
+        <b>Aghraharam</b>
+        <span>Filter Coffee</span>
+      </div>
+    </div>
+    <a href="index.html" class="back-link">&larr; Back to Home</a>
+  </div>
+</header>
+
+<section class="menu-hero">
+  <div class="wrap">
+    <p class="eyebrow">Our Specialities</p>
+    <h1>Full Menu</h1>
+    <p>Pure vegetarian favorites — freshly prepared through the day, priced honestly.</p>
+    <div class="divider"><span class="line"></span><span class="dot"></span><span class="line"></span></div>
+  </div>
+</section>
+
+<div id="tabsRoot" class="tabs"></div>
+
+<main class="wrap">
+  <div id="stateRoot"></div>
+  <div id="panelsRoot"></div>
+</main>
+
+<footer>
+  <div class="wrap">© 2026 Aghraharam Filter Coffee · West Nada, Guruvayur</div>
+</footer>
+
+<script>
+  // ---- Configuration -------------------------------------------------
+  // Fill these in with the real values for this restaurant's branch before
+  // going live. The public menu endpoint is unauthenticated and lives at
+  // GET {API_BASE}/api/public/branches/{BRANCH_ID}/menu (see
+  // qsr-system-backend/src/routes/public.js).
+  const API_BASE = 'http://localhost:9191';
+  const BRANCH_ID = '719bcc1e-59db-41b0-89bf-723089a21430'; // <-- set to the real branch UUID
+  // ---------------------------------------------------------------------
+
+  const tabsRoot = document.getElementById('tabsRoot');
+  const stateRoot = document.getElementById('stateRoot');
+  const panelsRoot = document.getElementById('panelsRoot');
+
+  function formatPrice(n) {
+    return '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  }
+
+  function renderState(html) {
+    stateRoot.innerHTML = html;
+    tabsRoot.innerHTML = '';
+    panelsRoot.innerHTML = '';
+  }
+
+  function itemRow(item) {
+    const oos = item.availability !== 'AVAILABLE';
+    const tags = [];
+    if (item.isRecommended) tags.push('<span class="tag-pill rec">Chef\'s pick</span>');
+    if (item.isPopular) tags.push('<span class="tag-pill popular">Popular</span>');
+    if (oos) tags.push(`<span class="tag-pill oos">${item.availability === 'OUT_OF_STOCK' ? 'Out of stock' : 'Unavailable'}</span>`);
+
+    return `
+      <div class="menu-row ${oos ? 'is-oos' : ''}">
+        <span class="veg-dot ${item.isVeg ? 'veg' : 'nonveg'}"></span>
+        <div class="row-body">
+          <div class="row-top">
+            <span class="item-name">${item.name}</span>
+            <span class="leader"></span>
+            <span class="price">${formatPrice(item.price)}</span>
+          </div>
+          ${item.description ? `<p class="item-desc">${item.description}</p>` : ''}
+          ${tags.length ? `<div class="item-tags">${tags.join('')}</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function groupHtml(items) {
+    return `<div class="menu-grid">${items.map(itemRow).join('')}</div>`;
+  }
+
+  function categoryPanelHtml(cat) {
+    const parts = [];
+    if (cat.menuItems && cat.menuItems.length) parts.push(groupHtml(cat.menuItems));
+    for (const sub of cat.subCategories || []) {
+      if (!sub.menuItems || !sub.menuItems.length) continue;
+      parts.push(`<h3 class="sub-heading">${sub.name}</h3>`);
+      parts.push(groupHtml(sub.menuItems));
+    }
+    return parts.join('') || '<p style="text-align:center;color:#8a7864;padding:40px 0;">No dishes in this category yet.</p>';
+  }
+
+  function renderMenu(categories) {
+    const withItems = categories.filter(
+      (c) => (c.menuItems && c.menuItems.length) || (c.subCategories || []).some((s) => s.menuItems?.length)
+    );
+
+    if (!withItems.length) {
+      renderState(`
+        <div class="state">
+          <span class="icon">🍽️</span>
+          <h2>No dishes published yet</h2>
+          <p>Check back soon — the menu is being set up.</p>
+        </div>`);
+      return;
+    }
+
+    stateRoot.innerHTML = '';
+
+    tabsRoot.innerHTML = withItems
+      .map((cat, i) => `<button class="tab-btn ${i === 0 ? 'active' : ''}" data-cat="${cat.id}">${cat.name}</button>`)
+      .join('');
+
+    panelsRoot.innerHTML = withItems
+      .map((cat, i) => `<div class="menu-panel ${i === 0 ? 'active' : ''}" id="panel-${cat.id}">${categoryPanelHtml(cat)}</div>`)
+      .join('');
+
+    tabsRoot.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        tabsRoot.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+        panelsRoot.querySelectorAll('.menu-panel').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`panel-${btn.dataset.cat}`).classList.add('active');
+      });
+    });
+  }
+
+  async function loadMenu() {
+    if (!BRANCH_ID) {
+      renderState(`
+        <div class="state">
+          <span class="icon">⚙️</span>
+          <h2>Menu not connected yet</h2>
+          <p>Set <code>BRANCH_ID</code> (and <code>API_BASE</code> if needed) at the top of menu.html's script to load dishes from the backend.</p>
+        </div>`);
+      return;
+    }
+
+    renderState(`
+      <div class="state">
+        <div class="spinner"></div>
+        <h2>Loading the menu…</h2>
+      </div>`);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/public/branches/${BRANCH_ID}/menu`);
+      const body = await res.json();
+      if (!res.ok || body.statusCode !== '00') {
+        throw new Error(body.message || 'Failed to load menu');
+      }
+      renderMenu(body.data || []);
+    } catch (err) {
+      renderState(`
+        <div class="state">
+          <span class="icon">⚠️</span>
+          <h2>Couldn't load the menu</h2>
+          <p>${err.message || 'Please check your connection and try again.'}</p>
+          <button class="retry-btn" onclick="loadMenu()">Retry</button>
+        </div>`);
+    }
+  }
+
+  loadMenu();
+</script>
+</body>
+</html>

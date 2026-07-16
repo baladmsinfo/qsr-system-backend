@@ -736,4 +736,60 @@ module.exports = async function (fastify, opts) {
         }
     );
 
+    // Storefront CMS content (CUSTOMER app home page). Readable by any staff
+    // role like /profile, editable by SUPERADMIN only like the logo.
+    fastify.get(
+        "/profile/storefront-content",
+        { preHandler: checkRole("SUPERADMIN", "BRANCHADMIN", "KITCHEN", "CASHIER", "WAITER", "ACCOUNTANT") },
+        async (request, reply) => {
+            try {
+                const content = await fastify.prisma.storefrontContent.findUnique({
+                    where: { companyId: request.user.companyId },
+                });
+                return reply.send({ statusCode: "00", message: "Storefront content fetched successfully", data: content });
+            } catch (err) {
+                request.log.error(err);
+                return reply.code(500).send({ statusCode: "99", message: "Failed to fetch storefront content", error: err.message });
+            }
+        }
+    );
+
+    fastify.put(
+        "/profile/storefront-content",
+        { preHandler: checkRole("SUPERADMIN") },
+        async (request, reply) => {
+            try {
+                const companyId = request.user.companyId;
+                const {
+                    heroTag, heroHeadline, heroSubtext, heroImageUrl,
+                    promiseTitle, promiseSubtitle, promiseItems,
+                    storyTitle, storyBody, storyPillars,
+                    whyChooseTitle, whyChooseItems,
+                    philosophyTitle, philosophyLines,
+                    testimonialsTitle, testimonials,
+                } = request.body;
+
+                const data = {
+                    heroTag, heroHeadline, heroSubtext, heroImageUrl,
+                    promiseTitle, promiseSubtitle, promiseItems: promiseItems || [],
+                    storyTitle, storyBody, storyPillars: storyPillars || [],
+                    whyChooseTitle, whyChooseItems: whyChooseItems || [],
+                    philosophyTitle, philosophyLines: philosophyLines || [],
+                    testimonialsTitle, testimonials: testimonials || [],
+                };
+
+                const content = await fastify.prisma.storefrontContent.upsert({
+                    where: { companyId },
+                    create: { companyId, ...data },
+                    update: data,
+                });
+
+                return reply.send({ statusCode: "00", message: "Storefront content updated successfully", data: content });
+            } catch (err) {
+                request.log.error(err);
+                return reply.code(500).send({ statusCode: "99", message: "Failed to update storefront content", error: err.message });
+            }
+        }
+    );
+
 }
