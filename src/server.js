@@ -128,7 +128,7 @@ fastify.after(async () => {
     }
 
     try {
-      console.log("Requests:", req.headers["x-api-key"]);
+      console.log("Requests api:", req.headers["x-api-key"]);
 
       const apiKey = req.headers["x-api-key"];
       const bearer = req.headers["authorization"]?.split(" ")[1];
