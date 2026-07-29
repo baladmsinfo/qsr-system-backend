@@ -70,6 +70,16 @@ enum OrderSource {
   POS
 }
 
+enum WebsiteStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+}
+
 // Fulfillment mode, independent of `source` (source = how/who placed it).
 // DELIVERY is modeled now so the schema doesn't need reshaping later, but no
 // route/UI exposes it yet - no rider/logistics system exists.
@@ -180,6 +190,14 @@ model Company {
   purchases      Purchase[]
 
   storefrontContent StorefrontContent?
+  website           Website?
+  paymentGateways   PaymentGatewayConfig[]
+
+  printers         Printer[]
+  printerProfiles  PrinterProfile[]
+  receiptTemplates ReceiptTemplate[]
+  printerJobs      PrinterJob[]
+  printHistory     PrintHistory[]
 
   trial            Boolean @default(true)
   primaryEmail     String
@@ -325,6 +343,7 @@ model Branch {
   orders           Order[]
   expenses         Expense[]
   purchases        Purchase[]
+  printers         Printer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -803,4 +822,438 @@ model Images {
   createdAt DateTime @default(now())
 
   @@map("images")
+}
+
+// ---------------------------------------------------------------------------
+// Website Builder - isolated drag-and-drop (Tailwind + GrapesJS) alternative
+// to StorefrontContent above. A Company that never touches the builder has
+// no Website row here, and the customer app keeps rendering StorefrontContent
+// (or its own generic defaults) exactly as before.
+// ---------------------------------------------------------------------------
+
+model Website {
+  id        String  @id @default(uuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name         String        @default("My Website")
+  status       WebsiteStatus @default(DRAFT)
+  customDomain String?       @unique
+
+  /// Unguessable token letting the builder preview draft (unpublished) pages
+  /// via the public tenant subdomain without exposing them to the world -
+  /// see GET /api/public/tenant/:slug's `?preview=` handling.
+  previewToken String @unique @default(uuid())
+
+  themeId String?
+  theme   Theme?  @relation(fields: [themeId], references: [id])
+
+  pages  Page[]
+  assets Asset[]
+
+  navigation       Navigation?
+  globalComponents GlobalComponent[]
+
+  deployments Deployment[]
+  domains     Domain[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum DeploymentStatus {
+  QUEUED
+  GENERATING
+  BUILDING
+  DEPLOYING
+  SUCCEEDED
+  FAILED
+  ROLLED_BACK
+}
+
+// One row per publish attempt. `version` is a per-website incrementing counter -
+// the static generator uploads to sites/{websiteId}/versions/{version}/ in DO
+// Spaces and then copies that version's objects into sites/{websiteId}/live/
+// (the path actually served), so rollback is just re-copying an older version's
+// objects back into live/ rather than regenerating anything.
+model Deployment {
+  id        String  @id @default(uuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id])
+
+  version     Int
+  environment String @default("production")
+
+  previewUrl    String?
+  productionUrl String?
+
+  status       DeploymentStatus @default(QUEUED)
+  errorMessage String?
+
+  createdBy String?
+  createdAt DateTime  @default(now())
+  completedAt DateTime?
+
+  @@unique([websiteId, version])
+}
+
+enum DomainVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum DomainSslStatus {
+  NONE
+  PENDING
+  ACTIVE
+  FAILED
+}
+
+model Domain {
+  id        String  @id @default(uuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id])
+
+  hostname  String  @unique
+  isPrimary Boolean @default(false)
+
+  verificationStatus DomainVerificationStatus @default(PENDING)
+  /// Shown to the user as the TXT record value to add at their DNS provider -
+  /// POST /domains/:id/verify does a real dns.resolveTxt lookup against this.
+  verificationToken  String                    @default(uuid())
+
+  sslStatus DomainSslStatus @default(NONE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Site-wide menu, 1:1 with Website. Page-linked items store only a `pageId` -
+// label/href are derived live from the current Page at render/edit time, so
+// renaming or deleting a page never requires an explicit "re-sync" step.
+model Navigation {
+  id        String  @id @default(uuid())
+  websiteId String  @unique
+  website   Website @relation(fields: [websiteId], references: [id])
+
+  style       String  @default("horizontal") // horizontal | vertical | mega
+  sticky      Boolean @default(true)
+  transparent Boolean @default(false)
+  showSearch  Boolean @default(false)
+  showSocial  Boolean @default(false)
+
+  /// { label, link } | null
+  ctaButton Json?
+
+  /// Tree, up to 3 levels: [{ id, label?, linkType: 'page'|'external'|'anchor', pageId?, url?, children: [...] }]
+  items Json @default("[]")
+
+  updatedAt DateTime @updatedAt
+}
+
+enum GlobalComponentKey {
+  HEADER
+  FOOTER
+  NEWSLETTER
+  CONTACT_FORM
+  ANNOUNCEMENT_BAR
+  COOKIE_BANNER
+}
+
+// A block instance shared across every page that references it via a
+// { type: "GlobalComponentRef", key } entry in Page.draftBlocks/publishedBlocks -
+// editing it once (through any page) updates everywhere it's referenced.
+model GlobalComponent {
+  id        String  @id @default(uuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id])
+
+  key       GlobalComponentKey
+  blockType String
+  props     Json
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([websiteId, key])
+}
+
+model Page {
+  id        String  @id @default(uuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id])
+
+  slug  String
+  title String
+  isHome Boolean @default(false)
+  /// Manual ordering for the Pages panel/nav - createdAt order isn't user-controllable
+  order Int @default(0)
+
+  /// Working copy, edited live in the builder: { blocks: [{ type, props }] }.
+  /// May contain { type: "GlobalComponentRef", key } entries alongside normal
+  /// { type, props } blocks - resolved against GlobalComponent at render/edit time.
+  draftBlocks Json
+
+  /// Last published snapshot - null until this page is published at least once
+  publishedBlocks Json?
+
+  seoTitle       String?
+  seoDescription String?
+
+  status PageStatus @default(DRAFT)
+
+  versions PageVersion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([websiteId, slug])
+}
+
+model PageVersion {
+  id     String @id @default(uuid())
+  pageId String
+  page   Page   @relation(fields: [pageId], references: [id])
+
+  blocks Json
+  /// e.g. "Autosave", "Published"
+  label String?
+
+  createdAt DateTime @default(now())
+}
+
+model Template {
+  id           String  @id @default(uuid())
+  name         String
+  category     String
+  thumbnailUrl String?
+
+  /// Starter layout: { blocks: [{ type, props }] }
+  blocks Json
+
+  isSystem Boolean @default(true)
+
+  createdAt DateTime @default(now())
+}
+
+model Asset {
+  id        String  @id @default(uuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id])
+
+  url      String
+  key      String?
+  filename String
+  mimetype String?
+  size     Int?
+
+  createdAt DateTime @default(now())
+}
+
+model Theme {
+  id     String @id @default(uuid())
+  name   String
+  /// { primary, secondary, accent, background, text }
+  colors Json
+
+  fontHeading String?
+  fontBody    String?
+
+  isSystem Boolean @default(true)
+
+  websites Website[]
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Payment Gateway Settings - per-merchant, server-side configured (not env
+// vars), so a company can store more than one gateway's credentials even
+// though only one is ever `isActive` at checkout. Real integration lives in
+// src/services/paymentGateways/ (routes/paymentGateways.js for merchant CRUD,
+// routes/publicPayments.js for the actual checkout-time initiate/verify).
+// ---------------------------------------------------------------------------
+
+enum PaymentGatewayProvider {
+  RAZORPAY
+  CASHFREE
+  WORLDLINE
+}
+
+model PaymentGatewayConfig {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  provider PaymentGatewayProvider @default(RAZORPAY)
+
+  keyId     String
+  /// Plain field, same convention as Company.privateapiKey/publicapiKey - no
+  /// encryption-at-rest infra exists in this codebase to hook into.
+  keySecret String
+  webhookSecret String?
+
+  /// "test" | "live"
+  mode     String  @default("test")
+  isActive Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, provider])
+}
+
+// ---------------------------------------------------------------------------
+// POS Terminal Printing - printer registry + receipt template engine.
+// A Printer's connectionConfig shape depends on connectionType:
+//   NETWORK   { ip, port }            (default port 9100 - raw ESC/POS over TCP)
+//   USB       { vendorId, productId }
+//   BLUETOOTH { address }             (MAC on Android, UUID on iOS/Web Bluetooth)
+//   WEBUSB / WEBSERIAL / SYSTEM: browser owns the handle, nothing persisted
+//   server-side beyond the type - these print client-side, never via the
+//   backend's own TCP driver.
+// PrinterJob is the offline/retry queue (backed by BullMQ, see
+// queues/print.queue.js + workers/printWorker.js, mirroring the existing
+// publish queue/worker pattern); PrintHistory is the permanent audit log a
+// completed/failed job gets copied into, kept even after old jobs age out.
+// ---------------------------------------------------------------------------
+
+enum PrinterConnectionType {
+  NETWORK
+  USB
+  BLUETOOTH
+  WEBUSB
+  WEBSERIAL
+  SYSTEM
+}
+
+enum PrintFormat {
+  ESC_POS
+  HTML
+  PDF
+  PNG
+}
+
+enum ReceiptTemplateType {
+  RECEIPT
+  KOT
+  INVOICE
+}
+
+enum PrinterJobStatus {
+  QUEUED
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model PrinterProfile {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name         String
+  /// 58 or 80 - standard thermal roll widths in mm.
+  paperWidthMm Int    @default(80)
+  charsPerLine Int    @default(48)
+  /// { hasCutter, hasDrawer, hasBarcode, hasQr, dpi }
+  capabilities Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  printers Printer[]
+
+  @@unique([companyId, name])
+}
+
+model Printer {
+  id               String                @id @default(uuid())
+  companyId        String
+  company          Company               @relation(fields: [companyId], references: [id])
+  branchId         String?
+  branch           Branch?               @relation(fields: [branchId], references: [id])
+  printerProfileId String?
+  printerProfile   PrinterProfile?       @relation(fields: [printerProfileId], references: [id])
+
+  name             String
+  connectionType   PrinterConnectionType
+  /// Shape depends on connectionType - see section comment above.
+  connectionConfig Json                  @default("{}")
+  isDefault        Boolean               @default(false)
+  isActive         Boolean               @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  printerJobs  PrinterJob[]
+  printHistory PrintHistory[]
+
+  @@unique([companyId, name])
+}
+
+model ReceiptTemplate {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name    String
+  type    ReceiptTemplateType @default(RECEIPT)
+  /// The designer's block tree - page settings + blocks[] (Logo, Items
+  /// Table, QR, Barcode, etc.) with position/style/conditional-visibility
+  /// per block. Same "render engine reads this, not code" contract as
+  /// StorefrontContent's block-based pages.
+  layoutJson Json
+  isDefault  Boolean             @default(false)
+  isActive   Boolean             @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  printerJobs  PrinterJob[]
+  printHistory PrintHistory[]
+
+  @@unique([companyId, name])
+}
+
+model PrinterJob {
+  id                String           @id @default(uuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id])
+  printerId         String
+  printer           Printer          @relation(fields: [printerId], references: [id])
+  receiptTemplateId String?
+  receiptTemplate   ReceiptTemplate? @relation(fields: [receiptTemplateId], references: [id])
+  orderId           String?
+
+  format PrintFormat
+  /// Resolved receipt data snapshot at enqueue time, so a retry hours later
+  /// reprints exactly what was originally intended even if the order's own
+  /// state has since changed (e.g. a refund).
+  payload Json
+
+  status    PrinterJobStatus @default(QUEUED)
+  attempts  Int              @default(0)
+  lastError String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PrintHistory {
+  id                String           @id @default(uuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id])
+  printerId         String?
+  printer           Printer?         @relation(fields: [printerId], references: [id])
+  receiptTemplateId String?
+  receiptTemplate   ReceiptTemplate? @relation(fields: [receiptTemplateId], references: [id])
+  orderId           String?
+
+  format       PrintFormat
+  status       PrinterJobStatus
+  errorMessage String?
+
+  createdAt DateTime @default(now())
 }

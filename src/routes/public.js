@@ -21,6 +21,24 @@ const { hashPassword, comparePassword } = require('../utils/hash')
 
 // Haversine distance in km - dataset of restaurant branches is small, so a
 // DB-side query + JS sort is simpler and plenty fast (no PostGIS needed).
+// Page-linked nav items only store a pageId - label/href are derived live
+// against the tenant's PUBLISHED pages, so a link to a still-draft or deleted
+// page is silently dropped rather than rendering a broken link on the live site.
+function resolvePublicNavItems(items, publishedPagesById) {
+  return (items || [])
+    .filter((item) => item.linkType !== 'page' || publishedPagesById.has(item.pageId))
+    .map((item) => {
+      const resolved = { ...item }
+      if (item.linkType === 'page') {
+        const page = publishedPagesById.get(item.pageId)
+        resolved.label = item.label || page.title
+        resolved.href = `/${page.slug}`
+      }
+      if (item.children?.length) resolved.children = resolvePublicNavItems(item.children, publishedPagesById)
+      return resolved
+    })
+}
+
 function distanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371
   const dLat = ((lat2 - lat1) * Math.PI) / 180
@@ -39,14 +57,50 @@ module.exports = async function (fastify, opts) {
   // auto-suggest the nearest branch or fall back to a full manual list.
   fastify.get('/tenant/:slug', async (request, reply) => {
     try {
-      const { lat, lng } = request.query
+      const { lat, lng, preview: previewToken } = request.query
       const hasCoords = lat !== undefined && lng !== undefined
 
       const company = await fastify.prisma.company.findFirst({
         where: { tenant: request.params.slug, isPubliclyListed: true },
-        include: { branches: true, storefrontContent: true },
+        include: {
+          branches: true,
+          storefrontContent: true,
+          website: {
+            include: {
+              theme: true,
+              // Fetched unfiltered/unconditionally (including draftBlocks) -
+              // whether a page is actually exposed, and with which blocks,
+              // is decided below once `isPreview` is known against this
+              // website's own previewToken, not at query time.
+              pages: {
+                select: { id: true, slug: true, title: true, isHome: true, status: true, draftBlocks: true, publishedBlocks: true, seoTitle: true, seoDescription: true },
+              },
+              navigation: true,
+              globalComponents: true,
+            },
+          },
+        },
       })
       if (!company) return reply.code(404).send({ statusCode: '01', message: 'Restaurant not found' })
+
+      // Only this exact website's own token unlocks its own draft pages -
+      // an unguessable uuid, so a wrong/missing token just falls through to
+      // the normal published-only view rather than erroring.
+      const isPreview = !!previewToken && !!company.website && previewToken === company.website.previewToken
+      if (company.website) {
+        company.website.pages = company.website.pages
+          .filter((p) => isPreview || p.status === 'PUBLISHED')
+          .map((p) => ({
+            id: p.id,
+            slug: p.slug,
+            title: p.title,
+            isHome: p.isHome,
+            seoTitle: p.seoTitle,
+            seoDescription: p.seoDescription,
+            publishedBlocks: isPreview ? p.draftBlocks : p.publishedBlocks,
+          }))
+        delete company.website.previewToken
+      }
 
       const branches = company.branches
         .map((b) => ({
@@ -83,6 +137,20 @@ module.exports = async function (fastify, opts) {
           cuisineTags: company.cuisineTags,
           branches,
           storefrontContent: company.storefrontContent || null,
+          website: company.website
+            ? {
+                ...company.website,
+                navigation: company.website.navigation
+                  ? {
+                      ...company.website.navigation,
+                      items: resolvePublicNavItems(
+                        company.website.navigation.items,
+                        new Map(company.website.pages.map((p) => [p.id, p]))
+                      ),
+                    }
+                  : null,
+              }
+            : null,
         },
       })
     } catch (err) {

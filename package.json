@@ -8,6 +8,8 @@
     "seed": "node prisma/seed.js",
     "seedcurrency": "node prisma/seedCurrency.js",
     "seedration": "node prisma/seedRation.js",
+    "seedbuilder": "node prisma/seedBuilder.js",
+    "build:static-css": "tailwindcss -i src/assets/static-site-input.css -o src/generated/static-site.css --config tailwind.config.static.js --minify",
     "studio": "npx prisma studio",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev && prisma generate",
@@ -31,17 +33,22 @@
     "bcrypt": "^5.1.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.65.1",
+    "bwip-js": "^4.11.2",
     "date-fns": "^4.1.0",
     "decimal.js": "^10.6.0",
     "dotenv": "^16.6.1",
     "ejs": "^3.1.10",
     "fastify": "^5.5.0",
+    "html-minifier-terser": "^7.2.0",
     "pino-pretty": "^9.0.0",
+    "qrcode": "^1.5.4",
+    "razorpay": "^2.9.8",
     "socket.io": "^4.8.3",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10",
-    "prisma": "^6.13.0"
+    "prisma": "^6.13.0",
+    "tailwindcss": "^3.4.19"
   }
 }

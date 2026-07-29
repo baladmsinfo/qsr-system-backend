@@ -202,6 +202,7 @@ fastify.after(async () => {
   fastify.register(require('./routes/account'), { prefix: '/api/account' })
   fastify.register(require('./routes/expense'), { prefix: '/api/expenses' })
   fastify.register(require('./routes/companies'), { prefix: '/api/company' })
+  fastify.register(require('./routes/builder'), { prefix: '/api/builder' })
   fastify.register(require("./routes/subscription"));
   fastify.register(require('./routes/payment'), { prefix: '/api/payments' })
   fastify.register(require('./routes/callback'), { prefix: '/api' })
@@ -224,6 +225,16 @@ fastify.after(async () => {
   fastify.register(require('./routes/pos'), { prefix: '/api/pos' })
   fastify.register(require('./routes/public'), { prefix: '/api/public' })
   fastify.register(require('./routes/customerAccount'), { prefix: '/api/customer' })
+  fastify.register(require('./routes/paymentGateways'), { prefix: '/api/payment-gateways' })
+  fastify.register(require('./routes/publicPayments'), { prefix: '/api/public/payment' })
+
+  // POS Terminal Printing
+  fastify.register(require('./routes/printers'), { prefix: '/api/printers' })
+  fastify.register(require('./routes/printerProfiles'), { prefix: '/api/printer-profiles' })
+  fastify.register(require('./routes/receiptTemplates'), { prefix: '/api/receipt-templates' })
+  fastify.register(require('./routes/print'), { prefix: '/api/print' })
+  fastify.register(require('./routes/printHistory'), { prefix: '/api/print-history' })
+  fastify.register(require('./routes/publicPrintAssets'), { prefix: '/api/public/print' })
 
   fastify.register(require("./plugins/subscription.js"), {
     SUBSCRIPTION_BASE_URL: fastify.config.SUBSCRIPTION_BASE_URL,
@@ -239,6 +250,19 @@ fastify.after(async () => {
     const status = error.statusCode || 500
     reply.status(status).send({ error: error.message || 'Internal Server Error' })
   })
+
+  // In-process worker (see workers/publishWorker.js for why not a separate
+  // deployed process). Fastify forbids addHook() once the instance is
+  // listening, so this is wired before start()/listen() - the worker's job
+  // processor only touches fastify.prisma/emitToCompany when an actual job
+  // runs, well after the server (and those decorations) are fully ready.
+  const { createPublishWorker } = require('./workers/publishWorker')
+  const publishWorker = createPublishWorker(fastify)
+  fastify.addHook('onClose', async () => { await publishWorker.close() })
+
+  const { createPrintWorker } = require('./workers/printWorker')
+  const printWorker = createPrintWorker(fastify)
+  fastify.addHook('onClose', async () => { await printWorker.close() })
 
   const start = async () => {
     try {
