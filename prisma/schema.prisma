@@ -199,6 +199,12 @@ model Company {
   printerJobs      PrinterJob[]
   printHistory     PrintHistory[]
 
+  subscriptions      Subscription[]
+  subscriptionEvents SubscriptionEvent[]
+
+  /// true = no active paid subscription (trial limits apply). Kept in sync by
+  /// services/subscription.service.js - the Subscription rows are the source
+  /// of truth, this flag is a denormalized convenience.
   trial            Boolean @default(true)
   primaryEmail     String
   secondaryEmail   String?
@@ -1239,6 +1245,92 @@ model PrinterJob {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Subscriptions - QSR is a consumer of the central Payment Subscription
+// product (server-to-server, see plugins/subscription.js). Plans and the
+// Worldline mandate live there; QSR keeps its own record of each purchase
+// attempt so access can be decided locally without calling out on every
+// request. One Subscription row = one checkout attempt (the central order).
+// Only a server-side verifyMandate result of "0300" ever moves a row to
+// ACTIVE - never anything reported by the browser.
+// ---------------------------------------------------------------------------
+
+enum CompanySubscriptionStatus {
+  PENDING    // checkout started, mandate not yet confirmed
+  ACTIVE     // mandate confirmed, inside the paid period
+  FAILED     // mandate rejected (0399) or verification failed permanently
+  EXPIRED    // paid period ended and the mandate could not be re-confirmed
+  CANCELLED  // ended by an admin
+  SUPERSEDED // replaced by a newer checkout attempt or a newer active plan
+}
+
+model Subscription {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  /// Central product / plan ids (SUBS_PRODUCT_ID and the chosen plan).
+  productId String
+  planId    String
+
+  /// Snapshot of the central plan at purchase time - name/price can change
+  /// centrally later; this is what the customer actually signed up for.
+  planName     String
+  planInterval String
+  price        Float
+  currency     String @default("INR")
+  planSnapshot Json?
+
+  status CompanySubscriptionStatus @default(PENDING)
+
+  /// Central Order.order_id (the Worldline txn_id) - the key for verifyMandate.
+  centralOrderId String  @unique
+  mandateId      String?
+  /// Last raw Worldline mandate status code seen ("0300" active, "0398"
+  /// pending, "0399" failed).
+  mandateStatus  String?
+
+  activatedAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  lastVerifiedAt     DateTime?
+  endedAt            DateTime?
+  /// Short, safe reason for FAILED / EXPIRED / SUPERSEDED / CANCELLED.
+  statusReason       String?
+
+  createdById String?
+
+  events SubscriptionEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@index([status, currentPeriodEnd])
+}
+
+/// Audit trail of every subscription state change (who/what triggered it).
+model SubscriptionEvent {
+  id             String        @id @default(uuid())
+  companyId      String
+  company        Company       @relation(fields: [companyId], references: [id])
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  /// e.g. INITIATED, ACTIVATED, VERIFY_PENDING, FAILED, RENEWED, EXPIRED,
+  /// SUPERSEDED, GRACE
+  type       String
+  fromStatus String?
+  toStatus   String?
+  actorId    String?
+  note       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([subscriptionId])
 }
 
 model PrintHistory {

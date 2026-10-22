@@ -34,8 +34,12 @@ const schema = {
     REDIS_HOST: { type: "string" },
     REDIS_PORT: { type: "string" },
     REDIS_PASSWORD: { type: "string" },
+    // Central Payment Subscription product (server-to-server). Optional so
+    // the app still boots without them - purchase is then disabled and
+    // trial limits apply (see plugins/subscription.js).
     SUBSCRIPTION_BASE_URL: { type: "string" },
     SUBSCRIPTION_APIKEY: { type: "string" },
+    SUBS_PRODUCT_ID: { type: "string" },
     allowedOrigins: {
       type: "string",
       default: "[\"http://localhost:3000\",\"http://127.0.0.1:3000\"]"

@@ -2,6 +2,8 @@
 const checkRole = require('../utils/checkRole');
 const { enqueueUserRegistrationEmail } = require("../services/emailServices");
 const bcrypt = require('bcrypt');
+const { withinLimit } = require('../services/subscription.service');
+const { sendSubscriptionError } = require('../utils/subscriptionErrors');
 
 module.exports = async function (fastify, opts) {
 
@@ -63,49 +65,54 @@ module.exports = async function (fastify, opts) {
                     return reply.send({ statusCode: "03", message: "Company not found" });
                 }
 
-                const branch = await fastify.prisma.branch.create({
-                    data: {
-                        name: branchName,
-                        addressLine1,
-                        addressLine2,
-                        addressLine3,
-                        city,
-                        state,
-                        pincode: Number(pincode),
-                        gstNumber,
-                        phone,
-                        openingTime,
-                        closingTime,
-                        deliveryRadiusKm: deliveryRadiusKm ? Number(deliveryRadiusKm) : null,
-                        latitude: latitude ? Number(latitude) : null,
-                        longitude: longitude ? Number(longitude) : null,
-                        companyId
-                    }
-                });
-
                 // const password = generateRandomPassword();
                 const password = "bucksbox";
 
                 const hashedPassword = await bcrypt.hash(password, 10);
 
-                const createdUser = await fastify.prisma.user.create({
-                    data: {
-                        email,
-                        password: hashedPassword,
-                        name,
-                        role: "BRANCHADMIN",
-                        companyId,
-                        branchId: branch.id
-                    },
-                    include: {
-                        company: true,
-                        branch: true
-                    }
+                // A new branch also adds a Branch Admin login, so both plan
+                // limits are checked - under lock, in the same transaction as
+                // the inserts, so concurrent requests can't exceed them.
+                const createdUser = await withinLimit(fastify, companyId, ["BRANCHES", "STAFF_USERS"], async (tx) => {
+                    const branch = await tx.branch.create({
+                        data: {
+                            name: branchName,
+                            addressLine1,
+                            addressLine2,
+                            addressLine3,
+                            city,
+                            state,
+                            pincode: Number(pincode),
+                            gstNumber,
+                            phone,
+                            openingTime,
+                            closingTime,
+                            deliveryRadiusKm: deliveryRadiusKm ? Number(deliveryRadiusKm) : null,
+                            latitude: latitude ? Number(latitude) : null,
+                            longitude: longitude ? Number(longitude) : null,
+                            companyId
+                        }
+                    });
+
+                    return tx.user.create({
+                        data: {
+                            email,
+                            password: hashedPassword,
+                            name,
+                            role: "BRANCHADMIN",
+                            companyId,
+                            branchId: branch.id
+                        },
+                        include: {
+                            company: true,
+                            branch: true
+                        }
+                    });
                 });
 
                 await enqueueUserRegistrationEmail({
                     to: email,
-                    name: branch.name,
+                    name: createdUser.branch.name,
                     role: "BRANCHADMIN",
                     email: email,
                     mobile_no: null,
@@ -119,6 +126,7 @@ module.exports = async function (fastify, opts) {
                 });
 
             } catch (err) {
+                if (sendSubscriptionError(reply, err)) return;
                 request.log.error(err);
                 return reply.send({
                     statusCode: "99",
@@ -394,16 +402,18 @@ module.exports = async function (fastify, opts) {
                 // Hash password
                 const hashed = await bcrypt.hash(password, 10);
 
-                const user = await fastify.prisma.user.create({
-                    data: {
-                        name,
-                        email,
-                        password: hashed,
-                        role,
-                        companyId,
-                        branchId
-                    }
-                });
+                const user = await withinLimit(fastify, companyId, "STAFF_USERS", (tx) =>
+                    tx.user.create({
+                        data: {
+                            name,
+                            email,
+                            password: hashed,
+                            role,
+                            companyId,
+                            branchId
+                        }
+                    })
+                );
 
                 await enqueueUserRegistrationEmail({
                     to: user.email,
@@ -421,6 +431,7 @@ module.exports = async function (fastify, opts) {
                 });
 
             } catch (err) {
+                if (sendSubscriptionError(reply, err)) return;
                 request.log.error(err);
                 return reply.send({
                     statusCode: "99",

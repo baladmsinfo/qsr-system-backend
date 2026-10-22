@@ -2,6 +2,8 @@
 const crypto = require('crypto')
 const checkRole = require('../utils/checkRole')
 const { resolveBranchId } = require('../utils/scope')
+const { withinLimit } = require('../services/subscription.service')
+const { sendSubscriptionError } = require('../utils/subscriptionErrors')
 
 const STAFF = ['SUPERADMIN', 'BRANCHADMIN', 'WAITER', 'CASHIER']
 const MANAGERS = ['SUPERADMIN', 'BRANCHADMIN']
@@ -31,17 +33,24 @@ module.exports = async function (fastify, opts) {
 
       const { tableNo, capacity } = request.body
 
-      const table = await fastify.prisma.diningTable.create({
+      // resolveBranchId trusts the request for SUPERADMIN - make sure the
+      // branch is actually this company's before creating (and counting) it.
+      const ownBranch = await fastify.prisma.branch.findFirst({ where: { id: branchId, companyId: request.user.companyId }, select: { id: true } })
+      if (!ownBranch) return reply.code(404).send({ statusCode: '01', message: 'Branch not found' })
+
+      // Tables are limited company-wide (across every branch).
+      const table = await withinLimit(fastify, request.user.companyId, 'TABLES', (tx) => tx.diningTable.create({
         data: {
           branchId,
           tableNo,
           capacity,
           qrCode: `${branchId}-table-${crypto.randomUUID()}`,
         },
-      })
+      }))
 
       return reply.code(201).send({ statusCode: '00', message: 'Table created successfully', data: table })
     } catch (err) {
+      if (sendSubscriptionError(reply, err)) return
       request.log.error(err)
       return reply.code(500).send({ statusCode: '99', message: 'Failed to create table', error: err.message })
     }
