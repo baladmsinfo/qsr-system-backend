@@ -349,6 +349,11 @@ module.exports = async function (fastify, opts) {
 
       return reply.code(201).send({ statusCode: '00', message: 'Order placed successfully', data: order })
     } catch (err) {
+      // Guests never see the restaurant's plan details - just that online
+      // ordering is unavailable, so they can order through the staff.
+      if (err.code === 'SUBSCRIPTION_LIMIT_REACHED') {
+        return reply.code(403).send({ statusCode: '02', message: 'This restaurant is not taking online orders right now. Please order with the staff.' })
+      }
       request.log.error(err)
       return reply.code(err.statusCode || 500).send({ statusCode: '99', message: err.message })
     }

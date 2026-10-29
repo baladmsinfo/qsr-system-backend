@@ -2,6 +2,8 @@
 const checkRole = require('../utils/checkRole')
 const { resolveBranchId } = require('../utils/scope')
 const { linkImageToMenuItem, replaceMenuItemImage, deleteMenuItemImages } = require('../services/imageService')
+const { withinLimit } = require('../services/subscription.service')
+const { sendSubscriptionError } = require('../utils/subscriptionErrors')
 
 const STAFF = ['SUPERADMIN', 'BRANCHADMIN', 'KITCHEN', 'CASHIER', 'WAITER', 'ACCOUNTANT']
 const MANAGERS = ['SUPERADMIN', 'BRANCHADMIN']
@@ -63,7 +65,12 @@ module.exports = async function (fastify, opts) {
         spicyLevel, tags, availability, preparationType, unitType, customUnitLabel, trackInventory,
       } = request.body
 
-      const item = await fastify.prisma.menuItem.create({
+      // resolveBranchId trusts the request for SUPERADMIN - make sure the
+      // branch is actually this company's before creating (and counting) it.
+      const ownBranch = await fastify.prisma.branch.findFirst({ where: { id: branchId, companyId }, select: { id: true } })
+      if (!ownBranch) return reply.code(404).send({ statusCode: '01', message: 'Branch not found' })
+
+      const item = await withinLimit(fastify, companyId, 'MENU_ITEMS', (tx) => tx.menuItem.create({
         data: {
           companyId,
           branchId,
@@ -88,7 +95,7 @@ module.exports = async function (fastify, opts) {
           customUnitLabel: unitType === 'CUSTOM' ? customUnitLabel || null : null,
           trackInventory: trackInventory ?? true,
         },
-      })
+      }))
 
       if (imageId) {
         try {
@@ -100,6 +107,7 @@ module.exports = async function (fastify, opts) {
 
       return reply.code(201).send({ statusCode: '00', message: 'Menu item created successfully', data: item })
     } catch (err) {
+      if (sendSubscriptionError(reply, err)) return
       request.log.error(err)
       return reply.code(500).send({ statusCode: '99', message: 'Failed to create menu item', error: err.message })
     }

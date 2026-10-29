@@ -103,6 +103,14 @@ fastify.after(async () => {
 
   fastify.register(require('./plugins/socket'))
 
+  // Central Payment Subscription client - registered before the routes that
+  // use it (plans, checkout, verification and limit enforcement).
+  fastify.register(require("./plugins/subscription.js"), {
+    SUBSCRIPTION_BASE_URL: fastify.config.SUBSCRIPTION_BASE_URL,
+    SUBSCRIPTION_APIKEY: fastify.config.SUBSCRIPTION_APIKEY,
+    SUBS_PRODUCT_ID: fastify.config.SUBS_PRODUCT_ID,
+  });
+
   fastify.addHook("preHandler", async (req, reply) => {
     console.log("Request URL:", req.raw.url);
     let publicPaths;
@@ -203,7 +211,7 @@ fastify.after(async () => {
   fastify.register(require('./routes/expense'), { prefix: '/api/expenses' })
   fastify.register(require('./routes/companies'), { prefix: '/api/company' })
   fastify.register(require('./routes/builder'), { prefix: '/api/builder' })
-  fastify.register(require("./routes/subscription"));
+  fastify.register(require("./routes/subscription"), { prefix: '/api/subscription' });
   fastify.register(require('./routes/payment'), { prefix: '/api/payments' })
   fastify.register(require('./routes/callback'), { prefix: '/api' })
   fastify.register(require('./routes/reports'), { prefix: '/api/reports' })
@@ -235,11 +243,6 @@ fastify.after(async () => {
   fastify.register(require('./routes/print'), { prefix: '/api/print' })
   fastify.register(require('./routes/printHistory'), { prefix: '/api/print-history' })
   fastify.register(require('./routes/publicPrintAssets'), { prefix: '/api/public/print' })
-
-  fastify.register(require("./plugins/subscription.js"), {
-    SUBSCRIPTION_BASE_URL: fastify.config.SUBSCRIPTION_BASE_URL,
-    SUBSCRIPTION_APIKEY: fastify.config.SUBSCRIPTION_APIKEY,
-  });
 
   // Global error handler
   fastify.setErrorHandler((error, request, reply) => {

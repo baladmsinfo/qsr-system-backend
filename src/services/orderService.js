@@ -1,5 +1,7 @@
 'use strict'
 
+const { getEntitlement, enforceLimit } = require('./subscription.service')
+
 const ORDER_INCLUDE = {
   table: true,
   customer: true,
@@ -187,7 +189,14 @@ async function createOrder(fastify, { companyId, branchId, tableId, customerId, 
 
   const { lines, subtotal, taxAmount, totalAmount } = await priceLines(prisma, companyId, branchId, items)
 
+  // Plan order limit - checked under lock inside the same transaction that
+  // creates the order, so concurrent orders can't overshoot it. Covers every
+  // path that places an order (staff, POS and guest QR/website).
+  const entitlement = await getEntitlement(fastify, companyId)
+
   const orderId = await prisma.$transaction(async (tx) => {
+    await enforceLimit(tx, companyId, 'ORDERS', entitlement)
+
     const order = await tx.order.create({
       data: {
         companyId,

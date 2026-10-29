@@ -2,6 +2,7 @@
 const checkRole = require('../utils/checkRole')
 const svc = require('../services/orderService')
 const { resolveBranchId } = require('../utils/scope')
+const { sendSubscriptionError } = require('../utils/subscriptionErrors')
 
 const STAFF = ['SUPERADMIN', 'BRANCHADMIN', 'WAITER', 'CASHIER', 'KITCHEN', 'ACCOUNTANT']
 const ORDER_TAKERS = ['SUPERADMIN', 'BRANCHADMIN', 'WAITER', 'CASHIER']
@@ -66,6 +67,7 @@ module.exports = async function (fastify, opts) {
 
       return reply.code(201).send({ statusCode: '00', message: 'Order created successfully', data: order })
     } catch (err) {
+      if (sendSubscriptionError(reply, err)) return
       request.log.error(err)
       return reply.code(err.statusCode || 500).send({ statusCode: '99', message: err.message })
     }
