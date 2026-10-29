@@ -1,4 +1,5 @@
 'use strict'
+const crypto = require('crypto')
 const checkRole = require('../utils/checkRole')
 const { createOrderPayment, createPrepayment, refundOrderPayment } = require('../services/paymentServices')
 const { resolveBranchId } = require('../utils/scope')
@@ -403,9 +404,32 @@ module.exports = async function (fastify, opts) {
     }
   })
 
-  // Starts an SDK QR: the server fixes the amount due, issues the gateway
-  // order id the SDK must use (so sdk-confirm can tie the result to this
-  // order) and hands over the order's branch credentials.
+  // SDK payment sessions are signed tokens rather than server memory, so they
+  // survive a backend restart and work across several backend processes.
+  // Payload: { g: gatewayOrderId, o: orderId, c: companyId, a: amount, s: settle, exp }.
+  const SDK_SESSION_TTL_MS = 30 * 60 * 1000
+  const sessionKey = () => crypto.createHmac('sha256', fastify.config.JWT_SECRET).update('qsr-upi-sdk-session').digest()
+  const b64url = (buf) => Buffer.from(buf).toString('base64url')
+
+  function signSdkSession(payload) {
+    const body = b64url(JSON.stringify({ ...payload, exp: Date.now() + SDK_SESSION_TTL_MS }))
+    return `${body}.${b64url(crypto.createHmac('sha256', sessionKey()).update(body).digest())}`
+  }
+
+  // -> payload, or null if the token is forged/malformed. Expiry is checked by the caller.
+  function readSdkSession(token) {
+    if (typeof token !== 'string' || token.length > 2000) return null
+    const [body, sig] = token.split('.')
+    if (!body || !sig) return null
+    const expected = crypto.createHmac('sha256', sessionKey()).update(body).digest()
+    const given = Buffer.from(sig, 'base64url')
+    if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return null
+    try { return JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) } catch { return null }
+  }
+
+  // Starts an SDK QR: the server fixes the amount due, issues a signed session
+  // (so sdk-confirm can tie the result to this order and amount) and hands
+  // over the order's branch credentials.
   fastify.post('/orders/:orderId/upi/sdk-session', { preHandler: checkRole(...CASHIERS) }, async (request, reply) => {
     try {
       const companyId = request.user.companyId
@@ -413,36 +437,63 @@ module.exports = async function (fastify, opts) {
       const { order, due } = await upiAmountDue(companyId, request.params.orderId, settle)
       const credentials = await requireUpiCredentials(companyId, order.branchId)
       const gatewayOrderId = gatewayOrderIdFor(order.id)
-      rememberQr(`sdk:${gatewayOrderId}`, { companyId, orderId: order.id, amount: due })
-      return reply.send({ statusCode: '00', message: 'UPI session started', data: { gatewayOrderId, amount: due, credentials } })
+      const sessionToken = signSdkSession({ g: gatewayOrderId, o: order.id, c: companyId, a: due, s: settle })
+      return reply.send({ statusCode: '00', message: 'UPI session started', data: { gatewayOrderId, sessionToken, amount: due, credentials } })
     } catch (err) {
       return sendError(request, reply, err, 'Failed to start the UPI payment')
     }
   })
 
-  // Records a payment the Android SDK widget reported as successful. The
-  // widget's result carries no BucksBox trans_id, so the server can't re-query
-  // the status - it accepts only a SUCCESS status for the exact amount due on
-  // a session it issued, and the gateway order id is the unique payment key.
-  // Body { gatewayOrderId, settle, result }. Idempotent per gatewayOrderId.
+  // Records a payment the Android SDK widget reported as successful, against
+  // the order. The widget's result carries no BucksBox trans_id, so the server
+  // can't re-query the status - it accepts only a SUCCESS status for the exact
+  // amount due on a session it signed, and the session's gateway order id is
+  // the unique payment key. Body { sessionToken, settle, result }.
+  // Idempotent per session.
   fastify.post('/orders/:orderId/upi/sdk-confirm', { preHandler: checkRole(...CASHIERS) }, async (request, reply) => {
-    try {
-      const companyId = request.user.companyId
-      const orderId = request.params.orderId
-      const settle = request.body?.settle === 'pay' ? 'pay' : 'prepay'
-      const gatewayOrderId = typeof request.body?.gatewayOrderId === 'string' ? request.body.gatewayOrderId.trim() : ''
-      const result = request.body?.result || {}
-      const review = (message) => reply.send({ statusCode: '00', message, data: { status: 'review', message } })
+    const companyId = request.user.companyId
+    const orderId = request.params.orderId
+    const session = readSdkSession(request.body?.sessionToken)
+    const gatewayOrderId = session?.g
 
-      const session = issuedQrs.get(`sdk:${gatewayOrderId}`)
-      if (!gatewayOrderId || !session || session.companyId !== companyId || session.orderId !== orderId) {
-        const existing = gatewayOrderId && await prisma().payment.findUnique({ where: { gatewayPaymentId: gatewayOrderId } })
-        if (existing && existing.orderId === orderId && existing.companyId === companyId) {
-          return reply.send({ statusCode: '00', message: 'UPI payment received', data: { status: 'paid', payment: existing } })
-        }
-        return reply.code(400).send({ statusCode: '01', message: 'Unknown or expired UPI session for this order - check the BucksBox dashboard and use Manual UPI entry' })
+    // This session's payment if it's already on this order - a retry, or a
+    // concurrent confirm that won the race - answered as paid again. Resolves
+    // true once it has replied (never the Reply itself: Reply is thenable, so
+    // awaiting it from an async function would resolve to undefined).
+    const sendIfRecorded = async () => {
+      const payment = gatewayOrderId && await prisma().payment.findUnique({ where: { gatewayPaymentId: gatewayOrderId } })
+      if (!payment) return false
+      if (payment.orderId !== orderId || payment.companyId !== companyId) {
+        reply.code(409).send({ statusCode: '99', message: 'This payment reference is already recorded against another order' })
+        return true
       }
-      if (result.orderId && result.orderId !== gatewayOrderId) return review('The payment result is for a different QR - check the BucksBox dashboard and use Manual UPI entry.')
+      const order = await prisma().order.findUnique({ where: { id: orderId }, include: { payments: true } })
+      reply.send({ statusCode: '00', message: 'UPI payment received', data: { status: 'paid', payment, order } })
+      return true
+    }
+
+    try {
+      const result = request.body?.result || {}
+      // Not auto-recorded: logged with the SDK result (no credentials in it) so
+      // the payment can be traced and settled with Manual UPI entry.
+      const review = (message) => {
+        request.log.warn({ orderId, gatewayOrderId, sdkResult: result }, `UPI SDK payment needs review: ${message}`)
+        return reply.send({ statusCode: '00', message, data: { status: 'review', message, reference: result.orderId || gatewayOrderId } })
+      }
+
+      if (!session || session.c !== companyId || session.o !== orderId) {
+        request.log.warn({ orderId, sdkResult: result }, 'UPI SDK confirm with an invalid session')
+        return reply.code(400).send({ statusCode: '01', message: 'This UPI payment session is not valid for this order - check the BucksBox dashboard and use Manual UPI entry' })
+      }
+      const settle = session.s === 'pay' ? 'pay' : 'prepay'
+
+      if (await sendIfRecorded()) return reply
+      if (Date.now() > session.exp) return review('This UPI payment session expired. Check the BucksBox dashboard and record it with Manual UPI entry.')
+
+      // result.orderId is not compared with gatewayOrderId: websdk's Checkout
+      // hands the widget `order_id` but UpiWidget.start() reads `orderId`, so
+      // the widget raises its own ORD<timestamp> id. The signed session +
+      // exact amount + one payment per session is what binds it to the order.
 
       const data = result.data || {}
       if (result.statusCode !== '00' || String(data.status || '').toUpperCase() !== 'SUCCESS') {
@@ -450,7 +501,7 @@ module.exports = async function (fastify, opts) {
       }
       const { due } = await upiAmountDue(companyId, orderId, settle)
       const paid = Number(data.amount ?? result.amount)
-      if (!Number.isFinite(paid) || Math.abs(paid - due) > 0.01 || Math.abs(session.amount - due) > 0.01) {
+      if (!Number.isFinite(paid) || Math.abs(paid - due) > 0.01 || Math.abs(Number(session.a) - due) > 0.01) {
         return review(`BucksBox reports Rs ${Number.isFinite(paid) ? paid : '?'} received but Rs ${due} is due. Check the BucksBox dashboard and record it with Manual UPI entry.`)
       }
 
@@ -458,14 +509,19 @@ module.exports = async function (fastify, opts) {
         orderId,
         settle,
         amount: due,
-        referenceNo: data.rrn || data.ref_id || gatewayOrderId,
+        referenceNo: data.rrn || data.ref_id || result.orderId || gatewayOrderId,
         gatewayPaymentId: gatewayOrderId,
         raw: result,
         note: `BucksBox UPI QR (Android SDK)${data.payer_vpa ? ` from ${data.payer_vpa}` : ''}`,
       })
-      issuedQrs.delete(`sdk:${gatewayOrderId}`)
+      request.log.info({ orderId, gatewayOrderId, paymentId: recorded.payment.id }, 'UPI SDK payment recorded')
       return reply.send({ statusCode: '00', message: 'UPI payment received', data: { status: 'paid', ...recorded } })
     } catch (err) {
+      // e.g. "already paid in full" / duplicate key because a concurrent
+      // confirm of this same payment got there first.
+      if (session && err.statusCode && err.statusCode < 500) {
+        if (await sendIfRecorded().catch(() => false)) return reply
+      }
       return sendError(request, reply, err, 'Failed to record the UPI payment')
     }
   })
