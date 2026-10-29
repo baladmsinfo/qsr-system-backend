@@ -49,6 +49,22 @@ async function paymentGatewayRoutes(fastify) {
           return reply.code(400).send({ statusCode: "01", message: "keyId and keySecret are required" });
         }
 
+        // BucksBox's key is a 32-byte AES key (64 hex chars or base64) - reject
+        // anything else here rather than at the counter's first QR.
+        if (provider === "BUCKSBOX" && keySecret && !/^[0-9a-fA-F]{64}$/.test(keySecret) && !/^[A-Za-z0-9+/]{43}=$/.test(keySecret)) {
+          return reply.code(400).send({ statusCode: "01", message: "BucksBox key must be 64 hex characters or a base64 32-byte key" });
+        }
+        // A BucksBox merchant belongs to one QSR account (see routes/pos.js).
+        if (provider === "BUCKSBOX") {
+          const [gateway, branch] = await Promise.all([
+            prisma().paymentGatewayConfig.findFirst({ where: { provider, keyId, NOT: { companyId } }, select: { id: true } }),
+            prisma().branchUpiConfig.findFirst({ where: { clientId: keyId, NOT: { companyId } }, select: { id: true } }),
+          ]);
+          if (gateway || branch) {
+            return reply.code(409).send({ statusCode: "01", message: "This BucksBox Client ID is already connected to another account" });
+          }
+        }
+
         const data = { keyId, mode: mode || "test" };
         if (keySecret) data.keySecret = keySecret;
         if (webhookSecret !== undefined) data.webhookSecret = webhookSecret || null;
@@ -73,6 +89,11 @@ async function paymentGatewayRoutes(fastify) {
       try {
         const provider = request.params.provider;
         const companyId = request.user.companyId;
+        // BucksBox only powers POS counter UPI (see routes/pos.js) - activating
+        // it would deactivate the storefront's real checkout gateway.
+        if (provider === "BUCKSBOX") {
+          return reply.code(400).send({ statusCode: "01", message: "BucksBox is used for POS UPI only and can't be set as the online checkout gateway" });
+        }
         const target = await prisma().paymentGatewayConfig.findUnique({ where: { companyId_provider: { companyId, provider } } });
         if (!target) return reply.code(404).send({ statusCode: "99", message: "Configure this gateway's credentials before activating it" });
 

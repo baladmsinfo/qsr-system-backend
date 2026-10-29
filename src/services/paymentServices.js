@@ -10,11 +10,23 @@ async function getAccountId(tx, companyId, name) {
   return acc.id
 }
 
+// Payment.gatewayPaymentId is @unique, so the same gateway transaction (e.g. a
+// BucksBox UPI txn ref) can never settle two orders - surface that as a 409
+// instead of a raw Prisma constraint error.
+async function rejectDuplicateGatewayPayment(run) {
+  try {
+    return await run()
+  } catch (err) {
+    if (err.code === 'P2002') throw httpError('This payment reference is already recorded against another order', 409)
+    throw err
+  }
+}
+
 /**
  * Cashier bills an order: records the payment and posts the corresponding
  * journal entries (Cash/Bank debit, Sales Revenue + Tax Payable credit).
  */
-async function createOrderPayment(fastify, { companyId, orderId, amount, method, referenceNo, note, cashierId }) {
+async function createOrderPayment(fastify, { companyId, orderId, amount, method, referenceNo, gatewayPaymentId, rawResponse, note, cashierId }) {
   const prisma = fastify.prisma
 
   const order = await prisma.order.findFirst({ where: { id: orderId, companyId }, include: { payments: true } })
@@ -27,7 +39,7 @@ async function createOrderPayment(fastify, { companyId, orderId, amount, method,
     throw httpError('This order has already been paid in full', 400)
   }
 
-  const payment = await prisma.$transaction(async (tx) => {
+  const payment = await rejectDuplicateGatewayPayment(() => prisma.$transaction(async (tx) => {
     const created = await tx.payment.create({
       data: {
         companyId,
@@ -35,6 +47,8 @@ async function createOrderPayment(fastify, { companyId, orderId, amount, method,
         amount,
         method,
         referenceNo,
+        gatewayPaymentId: gatewayPaymentId || undefined,
+        rawResponse: rawResponse || undefined,
         note,
         date: new Date(),
       },
@@ -81,7 +95,7 @@ async function createOrderPayment(fastify, { companyId, orderId, amount, method,
     await tx.order.update({ where: { id: orderId }, data: { status: 'COMPLETED', cashierId: cashierId || order.cashierId } })
 
     return created
-  })
+  }))
 
   const updatedOrder = await prisma.order.findUnique({ where: { id: orderId }, include: { payments: true, orderItems: { include: { menuItem: true } }, table: true } })
 
@@ -100,7 +114,7 @@ async function createOrderPayment(fastify, { companyId, orderId, amount, method,
  * COMPLETED workflow (driven by the kitchen ticket engine / Live Orders
  * "Mark Served" + "Mark Completed" buttons) still runs its usual course.
  */
-async function createPrepayment(fastify, { companyId, orderId, amount, method, referenceNo, note, cashierId }) {
+async function createPrepayment(fastify, { companyId, orderId, amount, method, referenceNo, gatewayPaymentId, rawResponse, note, cashierId }) {
   const prisma = fastify.prisma
 
   const order = await prisma.order.findFirst({ where: { id: orderId, companyId }, include: { payments: true } })
@@ -113,7 +127,7 @@ async function createPrepayment(fastify, { companyId, orderId, amount, method, r
     throw httpError('This order has already been paid in full', 400)
   }
 
-  const payment = await prisma.$transaction(async (tx) => {
+  const payment = await rejectDuplicateGatewayPayment(() => prisma.$transaction(async (tx) => {
     const created = await tx.payment.create({
       data: {
         companyId,
@@ -121,6 +135,8 @@ async function createPrepayment(fastify, { companyId, orderId, amount, method, r
         amount,
         method,
         referenceNo,
+        gatewayPaymentId: gatewayPaymentId || undefined,
+        rawResponse: rawResponse || undefined,
         note,
         date: new Date(),
       },
@@ -167,7 +183,7 @@ async function createPrepayment(fastify, { companyId, orderId, amount, method, r
     await tx.order.update({ where: { id: orderId }, data: { cashierId: cashierId || order.cashierId } })
 
     return created
-  })
+  }))
 
   const updatedOrder = await prisma.order.findUnique({
     where: { id: orderId },

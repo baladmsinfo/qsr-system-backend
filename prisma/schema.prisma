@@ -192,6 +192,7 @@ model Company {
   storefrontContent StorefrontContent?
   website           Website?
   paymentGateways   PaymentGatewayConfig[]
+  branchUpiConfigs  BranchUpiConfig[]
 
   printers         Printer[]
   printerProfiles  PrinterProfile[]
@@ -344,6 +345,7 @@ model Branch {
   expenses         Expense[]
   purchases        Purchase[]
   printers         Printer[]
+  upiConfig        BranchUpiConfig?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -890,8 +892,8 @@ model Deployment {
   status       DeploymentStatus @default(QUEUED)
   errorMessage String?
 
-  createdBy String?
-  createdAt DateTime  @default(now())
+  createdBy   String?
+  createdAt   DateTime  @default(now())
   completedAt DateTime?
 
   @@unique([websiteId, version])
@@ -921,7 +923,7 @@ model Domain {
   verificationStatus DomainVerificationStatus @default(PENDING)
   /// Shown to the user as the TXT record value to add at their DNS provider -
   /// POST /domains/:id/verify does a real dns.resolveTxt lookup against this.
-  verificationToken  String                    @default(uuid())
+  verificationToken  String                   @default(uuid())
 
   sslStatus DomainSslStatus @default(NONE)
 
@@ -983,11 +985,11 @@ model Page {
   websiteId String
   website   Website @relation(fields: [websiteId], references: [id])
 
-  slug  String
-  title String
+  slug   String
+  title  String
   isHome Boolean @default(false)
   /// Manual ordering for the Pages panel/nav - createdAt order isn't user-controllable
-  order Int @default(0)
+  order  Int     @default(0)
 
   /// Working copy, edited live in the builder: { blocks: [{ type, props }] }.
   /// May contain { type: "GlobalComponentRef", key } entries alongside normal
@@ -1017,7 +1019,7 @@ model PageVersion {
 
   blocks Json
   /// e.g. "Autosave", "Published"
-  label String?
+  label  String?
 
   createdAt DateTime @default(now())
 }
@@ -1078,6 +1080,32 @@ enum PaymentGatewayProvider {
   RAZORPAY
   CASHFREE
   WORLDLINE
+  /// POS counter UPI QR via @bucksbox/capacitor-sdk (keyId = clientId,
+  /// keySecret = AES key). Never `isActive` - it isn't an online-checkout
+  /// gateway, so it must not displace the storefront's active one.
+  BUCKSBOX
+}
+
+/// BucksBox UPI QR credentials for one branch (outlet), overriding the
+/// company-wide PaymentGatewayConfig(provider BUCKSBOX) default - lets each
+/// outlet collect into its own BucksBox merchant/VPA. POS only.
+model BranchUpiConfig {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+  branchId  String  @unique
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  /// BucksBox Client ID (User.apiKey) and AES key (User.SaltAESKey)
+  clientId String
+  key      String
+  /// "test" (staging) | "live" (production)
+  mode     String @default("test")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
 }
 
 model PaymentGatewayConfig {
@@ -1087,10 +1115,10 @@ model PaymentGatewayConfig {
 
   provider PaymentGatewayProvider @default(RAZORPAY)
 
-  keyId     String
+  keyId         String
   /// Plain field, same convention as Company.privateapiKey/publicapiKey - no
   /// encryption-at-rest infra exists in this codebase to hook into.
-  keySecret String
+  keySecret     String
   webhookSecret String?
 
   /// "test" | "live"
@@ -1169,13 +1197,13 @@ model PrinterProfile {
 }
 
 model Printer {
-  id               String                @id @default(uuid())
+  id               String          @id @default(uuid())
   companyId        String
-  company          Company               @relation(fields: [companyId], references: [id])
+  company          Company         @relation(fields: [companyId], references: [id])
   branchId         String?
-  branch           Branch?               @relation(fields: [branchId], references: [id])
+  branch           Branch?         @relation(fields: [branchId], references: [id])
   printerProfileId String?
-  printerProfile   PrinterProfile?       @relation(fields: [printerProfileId], references: [id])
+  printerProfile   PrinterProfile? @relation(fields: [printerProfileId], references: [id])
 
   name             String
   connectionType   PrinterConnectionType
@@ -1198,8 +1226,8 @@ model ReceiptTemplate {
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
-  name    String
-  type    ReceiptTemplateType @default(RECEIPT)
+  name       String
+  type       ReceiptTemplateType @default(RECEIPT)
   /// The designer's block tree - page settings + blocks[] (Logo, Items
   /// Table, QR, Barcode, etc.) with position/style/conditional-visibility
   /// per block. Same "render engine reads this, not code" contract as
@@ -1227,7 +1255,7 @@ model PrinterJob {
   receiptTemplate   ReceiptTemplate? @relation(fields: [receiptTemplateId], references: [id])
   orderId           String?
 
-  format PrintFormat
+  format  PrintFormat
   /// Resolved receipt data snapshot at enqueue time, so a retry hours later
   /// reprints exactly what was originally intended even if the order's own
   /// state has since changed (e.g. a refund).
